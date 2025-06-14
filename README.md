@@ -1,6 +1,6 @@
-# 🖼️ frames-v2-demo
+# 🖼️ dappcon-miniapp-workshop-template
 
-A Farcaster Frames v2 demo app.
+A Farcaster Mini App demo app.
 
 [🛠️ Frame Playground](https://warpcast.com/~/developers/frame-playground) (Mobile only)<br/>
 [📦 Frame SDK](https://github.com/farcasterxyz/frames/)<br/>
@@ -26,7 +26,7 @@ To try your app in the Warpcast playground, you'll want to use a tunneling tool 
 
 ## Tutorial
 
-Here's a full walkthrough of creating a frames v2 app:
+Here's a full walkthrough of creating a mini app:
 
 [![Frames v2 Tutorial](https://img.youtube.com/vi/5wAbo_YsuC4/0.jpg)](https://www.youtube.com/watch?v=5wAbo_YsuC4)
 
@@ -228,8 +228,8 @@ import "~/app/globals.css";
 import { Providers } from "~/app/providers";
 
 export const metadata: Metadata = {
-  title: "Farcaster Frames v2 Demo",
-  description: "A Farcaster Frames v2 demo app",
+  title: "DappCon Mini App Workshop Template",
+  description: "by hellno.eth",
 };
 
 export default function RootLayout({
@@ -259,7 +259,7 @@ For now, let's just put in a placeholder, Since our frame app will be rendering 
 export default function Demo() {
   return (
     <div className="w-[300px] mx-auto py-4 px-2">
-      <h1 className="text-2xl font-bold text-center mb-4">Frames v2 Demo</h1>
+      <h1 className="text-2xl font-bold text-center mb-4">DappCon Mini App Workshop Template</h1>
     </div>
   );
 }
@@ -342,7 +342,7 @@ export default function Demo() {
 
   return (
     <div className="w-[300px] mx-auto py-4 px-2">
-      <h1 className="text-2xl font-bold text-center mb-4">Frames v2 Demo</h1>
+      <h1 className="text-2xl font-bold text-center mb-4">DappCon Mini App Workshop Templatee</h1>
     </div>
   );
 }
@@ -383,7 +383,7 @@ export default function Demo() {
 
   return (
     <div className="w-[300px] mx-auto py-4 px-2">
-      <h1 className="text-2xl font-bold text-center mb-4">Frames v2 Demo</h1>
+      <h1 className="text-2xl font-bold text-center mb-4">DappCon Mini App Workshop Template</h1>
 
       <div className="mb-4">
         <h2 className="font-2xl font-bold">Context</h2>
@@ -450,7 +450,7 @@ export default function Demo() {
 
   return (
     <div className="w-[300px] mx-auto py-4 px-2">
-      <h1 className="text-2xl font-bold text-center mb-4">Frames v2 Demo</h1>
+      <h1 className="text-2xl font-bold text-center mb-4">DappCon Mini App Workshop Template</h1>
 
       <div className="mb-4">
         <h2 className="font-2xl font-bold">Context</h2>
@@ -519,7 +519,7 @@ export default function Demo() {
 
   return (
     <div className="w-[300px] mx-auto py-4 px-2">
-      <h1 className="text-2xl font-bold text-center mb-4">Frames v2 Demo</h1>
+      <h1 className="text-2xl font-bold text-center mb-4">DappCon Mini App Workshop Template</h1>
 
       {/* context toggle and data */}
 
@@ -581,7 +581,7 @@ export default function Demo() {
 
   return (
     <div className="w-[300px] mx-auto py-4 px-2">
-      <h1 className="text-2xl font-bold text-center mb-4">Frames v2 Demo</h1>
+      <h1 className="text-2xl font-bold text-center mb-4">DappCon Mini App Workshop Template</h1>
 
       <div>
         <h2 className="font-2xl font-bold">Actions</h2>
@@ -647,7 +647,7 @@ export default function Demo() {
 
   return (
     <div className="w-[300px] mx-auto py-4 px-2">
-      <h1 className="text-2xl font-bold text-center mb-4">Frames v2 Demo</h1>
+      <h1 className="text-2xl font-bold text-center mb-4">DappCon Mini App Workshop Template</h1>
 
       {/* Context and action buttons omitted */}
 
@@ -702,7 +702,7 @@ export default function Demo() {
 
   return (
     <div className="w-[300px] mx-auto py-4 px-2">
-      <h1 className="text-2xl font-bold text-center mb-4">Frames v2 Demo</h1>
+      <h1 className="text-2xl font-bold text-center mb-4">DappCon Mini App Workshop Template</h1>
 
       {/* Context and action buttons omitted */}
 
@@ -811,7 +811,7 @@ export default function Demo() {
 
   return (
     <div className="w-[300px] mx-auto py-4 px-2">
-      <h1 className="text-2xl font-bold text-center mb-4">Frames v2 Demo</h1>
+      <h1 className="text-2xl font-bold text-center mb-4">DappCon Mini App Workshop Template</h1>
 
       {/* Context and actions omitted. */}
 
@@ -972,7 +972,7 @@ export default function Demo() {
   const signTyped = useCallback(() => {
     signTypedData({
       domain: {
-        name: "Frames v2 Demo",
+        name: "DappCon Mini App Workshop Template",
         version: "1",
         chainId: 8453,
       },
@@ -1001,7 +1001,7 @@ export default function Demo() {
 
   return (
     <div className="w-[300px] mx-auto py-4 px-2">
-      <h1 className="text-2xl font-bold text-center mb-4">Frames v2 Demo</h1>
+      <h1 className="text-2xl font-bold text-center mb-4">DappCon Mini App Workshop Template</h1>
 
       <div className="mb-4">
         <h2 className="font-2xl font-bold">Context</h2>
