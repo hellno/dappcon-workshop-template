@@ -8,9 +8,11 @@ const Demo = dynamic(() => import("~/components/Demo"), {
 });
 
 export default function App(
-  { title }: { title?: string } = { title: "Frames v2 Demo" }
+  { title }: { title?: string } = {
+    title: "DappCon Mini App Workshop Template",
+  },
 ) {
-  ReactDOM.preconnect('https://auth.farcaster.xyz')
+  ReactDOM.preconnect("https://auth.farcaster.xyz");
 
   return <Demo title={title} />;
 }

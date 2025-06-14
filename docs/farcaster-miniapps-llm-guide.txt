@@ -1,0 +1,121 @@
+# Farcaster Mini Apps Guide for LLMs
+
+This document contains comprehensive information about Farcaster Mini Apps for development reference.
+
+## Overview
+
+Farcaster Mini Apps are web applications built with HTML, CSS, and JavaScript that can be discovered and used within Farcaster clients. They are rendered in a vertical modal interface and can access native Farcaster features.
+
+## Core Characteristics
+
+- **Discoverable**: Through social feeds and cast embeds
+- **Native Integration**: Access to Farcaster authentication and wallet interactions  
+- **Constrained Interface**: Rendered in vertical modal with specific size requirements
+- **Multi-framework Support**: Works with React, Vue, vanilla JS, etc.
+
+## Key SDK Components
+
+### 1. Authentication
+- Context-aware user data access
+- QuickAuth for JWT token generation
+- User profile information retrieval
+
+### 2. Wallet Integration
+- **Ethereum**: Full transaction support, signing, chain switching
+- **Solana**: Transaction sending, message signing, token operations
+- Multi-chain support (Base, Optimism, Mainnet, etc.)
+
+### 3. Native Actions
+- `sdk.actions.ready()` - Signal app is loaded
+- `sdk.actions.openUrl()` - Open external URLs
+- `sdk.actions.close()` - Close mini app
+- `sdk.actions.addFrame()` - Add to user's client
+- `sdk.actions.composeCast()` - Open cast composer
+- `sdk.actions.viewProfile()` - View user profiles
+- Haptic feedback support
+
+### 4. Notifications
+- Push notification capability
+- Token-based authentication for server endpoints
+- Rate limiting and delivery tracking
+
+## Manifest Requirements
+
+Apps must host a manifest at `/.well-known/farcaster.json` containing:
+
+```json
+{
+  "accountAssociation": {
+    "header": "eyJmaWQiOjM...",
+    "payload": "eyJkb21haW4i...",
+    "signature": "MHg5ZGQ3..."
+  },
+  "frame": {
+    "name": "App Name",
+    "iconUrl": "https://example.com/icon.png",
+    "splashImageUrl": "https://example.com/splash.png",
+    "splashBackgroundColor": "#ffffff",
+    "homeUrl": "https://example.com"
+  }
+}
+```
+
+## Development Setup
+
+### CLI Creation
+```bash
+npx @farcaster/create-mini-app
+```
+
+### Manual Installation
+```bash
+npm install @farcaster/frame-sdk
+# For Ethereum
+npm install wagmi viem @tanstack/react-query
+# For Solana  
+npm install @farcaster/mini-app-solana
+```
+
+### Required Patterns
+- Dynamic imports for client-side components
+- `"use client"` directive for React components using SDK
+- Proper error handling for wallet operations
+- Loading states during SDK initialization
+
+## Context and Launch Detection
+
+Mini apps can detect how they were launched:
+- From cast embed
+- From notification
+- From profile page
+- Direct URL access
+
+Context provides user information, client details, and launch parameters.
+
+## Testing and Distribution
+
+### Local Testing
+- Use ngrok to expose local development server
+- Test in Warcpast Frame Playground (mobile only)
+- Monitor console for SDK events and errors
+
+### Distribution
+- Apps shared through cast embeds with rich metadata
+- Interactive buttons for user engagement
+- Social discovery through Farcaster feeds
+
+## Security Considerations
+
+- Context data is currently unauthenticated in preview
+- Implement proper JWT validation for authenticated endpoints
+- Follow security best practices for wallet interactions
+- Validate all user inputs and external data
+
+## Framework Integration
+
+Works with popular frameworks:
+- Next.js (App Router recommended)
+- React + Vite
+- Vue.js
+- Vanilla JavaScript
+- Other modern web frameworks

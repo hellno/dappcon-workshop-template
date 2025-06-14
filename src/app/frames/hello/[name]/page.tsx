@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title: "Launch Frame",
       action: {
         type: "launch_frame",
-        name: "Farcaster Frames v2 Demo",
+        name: "DappCon Mini App Workshop Template",
         url: `${appUrl}/frames/hello/${name}/`,
         splashImageUrl: `${appUrl}/splash.png`,
         splashBackgroundColor: "#f7f7f7",
