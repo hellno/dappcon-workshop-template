@@ -33,14 +33,6 @@ export function useMiniAppSdk() {
       setIsMiniAppSaved(false);
     });
 
-    sdk.on("notificationsEnabled", ({ notificationDetails }) => {
-      setLastEvent("notificationsEnabled");
-    });
-
-    sdk.on("notificationsDisabled", () => {
-      setLastEvent("notificationsDisabled");
-    });
-
     // CRITICAL TO LOAD MINI APP - DON'T REMOVE
     sdk.actions.ready({});
     setIsSDKLoaded(true);

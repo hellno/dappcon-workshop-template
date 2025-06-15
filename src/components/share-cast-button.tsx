@@ -32,7 +32,7 @@ export function ShareCastButton({
     const frameContext = await sdk.context;
     if (frameContext) {
       e.preventDefault();
-      let cast: { text: string; embeds: [] | [string] } = {
+      const cast: { text: string; embeds: [] | [string] } = {
         text,
         embeds: [],
       };

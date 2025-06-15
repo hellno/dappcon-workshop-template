@@ -1,32 +1,9 @@
 "use client";
 
-import {
-  getAssociatedTokenAddress,
-  createAssociatedTokenAccountInstruction,
-  createTransferCheckedInstruction,
-  createApproveInstruction,
-} from "@solana/spl-token";
-import {
-  useConnection as useSolanaConnection,
-  useWallet as useSolanaWallet,
-} from "@solana/wallet-adapter-react";
-import { jwtDecode } from "jwt-decode";
-import {
-  PublicKey as SolanaPublicKey,
-  SystemProgram as SolanaSystemProgram,
-  Transaction as SolanaTransaction,
-  VersionedTransaction,
-  TransactionMessage,
-} from "@solana/web3.js";
 import { useCallback, useState, useMemo, useEffect } from "react";
 import { Input } from "../components/ui/input";
-import {
-  AddMiniApp,
-  ComposeCast,
-  FrameNotificationDetails,
-  SignIn as SignInCore,
-  type Context,
-} from "@farcaster/frame-sdk";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { FrameNotificationDetails, type Context } from "@farcaster/frame-sdk";
 import { useMiniAppSdk } from "~/hooks/use-miniapp-sdk";
 import {
   useAccount,
@@ -41,34 +18,18 @@ import {
 } from "wagmi";
 
 import { config } from "~/components/providers/WagmiProvider";
-import { Button } from "~/components/ui/Button";
+import { Button } from "~/components/ui/button";
 import { truncateAddress } from "~/lib/truncateAddress";
-import {
-  base,
-  degen,
-  mainnet,
-  monadTestnet,
-  optimism,
-  unichain,
-} from "wagmi/chains";
+import { base, degen, mainnet, optimism, unichain } from "wagmi/chains";
 import { BaseError, UserRejectedRequestError } from "viem";
-import { createStore } from "mipd";
 import { Label } from "~/components/ui/label";
 
 export default function Demo(
-  { title }: { title?: string } = { title: "Frames v2 Demo" },
+  { title }: { title?: string } = { title: "Mini App Demo" },
 ) {
-  const {
-    context,
-    sdk,
-    isSDKLoaded,
-    isMiniAppSaved: added,
-    lastEvent,
-    pinFrame,
-    pinFrameResponse,
-  } = useMiniAppSdk();
+  const { context, sdk, isSDKLoaded, lastEvent, pinFrame, pinFrameResponse } =
+    useMiniAppSdk();
 
-  const [txHash, setTxHash] = useState<string | null>(null);
   const [notificationDetails, setNotificationDetails] =
     useState<FrameNotificationDetails | null>(null);
   const [sendNotificationResult, setSendNotificationResult] = useState("");
@@ -79,18 +40,6 @@ export default function Demo(
 
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-
-  const {
-    sendTransaction,
-    error: sendTxError,
-    isError: isSendTxError,
-    isPending: isSendTxPending,
-  } = useSendTransaction();
-
-  const { isLoading: isConfirming, isSuccess: isConfirmed } =
-    useWaitForTransactionReceipt({
-      hash: txHash as `0x${string}`,
-    });
 
   const {
     signTypedData,
@@ -127,14 +76,6 @@ export default function Demo(
     switchChain({ chainId: nextChain.id });
   }, [switchChain, nextChain.id]);
 
-  const openUrl = useCallback(() => {
-    sdk.actions.openUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
-  }, []);
-
-  const openWarpcastUrl = useCallback(() => {
-    sdk.actions.openUrl("https://warpcast.com/~/compose");
-  }, []);
-
   const close = useCallback(() => {
     sdk.actions.close();
   }, []);
@@ -170,22 +111,6 @@ export default function Demo(
       setSendNotificationResult(`Error: ${error}`);
     }
   }, [context, notificationDetails]);
-
-  const sendTx = useCallback(() => {
-    sendTransaction(
-      {
-        // call yoink() on Yoink contract
-        to: "0x4bBFD120d9f352A0BEd7a014bd67913a2007a878",
-        data: "0x9846cd9efc000023c0",
-        chainId: monadTestnet.id,
-      },
-      {
-        onSuccess: (hash) => {
-          setTxHash(hash);
-        },
-      },
-    );
-  }, [sendTransaction]);
 
   const signTyped = useCallback(() => {
     signTypedData({
@@ -224,7 +149,7 @@ export default function Demo(
           <h2 className="font-2xl font-bold">Context</h2>
 
           <div className="p-4 mt-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
-            <pre className="text-background font-mono text-xs whitespace-pre-wrap break-words max-w-[260px] overflow-x-">
+            <pre className="text-background font-mono text-md whitespace-pre-wrap break-words max-w-[260px] overflow-x-">
               {JSON.stringify(context, null, 2)}
             </pre>
           </div>
@@ -234,22 +159,18 @@ export default function Demo(
           <h2 className="font-2xl font-bold">Actions</h2>
 
           <div className="mb-4">
-            <Button onClick={openUrl}>Open Link</Button>
-          </div>
-
-          <div className="mb-4">
             <ViewProfile />
           </div>
 
           <div className="mb-4">
-            <Button onClick={close}>Close Frame</Button>
+            <Button onClick={close}>Close</Button>
           </div>
         </div>
 
         <div className="mb-4">
-          <h2 className="font-2xl font-bold">Frame Management</h2>
+          <h2 className="font-2xl font-bold">Mini App Management</h2>
           <div className="mb-2">
-            <Button onClick={pinFrame}>Add Frame</Button>
+            <Button onClick={pinFrame}>Add Mini App</Button>
             {pinFrameResponse && (
               <div className="mt-2 text-xs text-gray-600">
                 {pinFrameResponse}
@@ -309,32 +230,8 @@ export default function Demo(
               </div>
               <div className="mb-4">
                 <Button
-                  onClick={sendTx}
-                  disabled={!isConnected || isSendTxPending}
-                  isLoading={isSendTxPending}
-                >
-                  Send Transaction (contract)
-                </Button>
-                {isSendTxError && renderError(sendTxError)}
-                {txHash && (
-                  <div className="mt-2 text-xs">
-                    <div>Hash: {truncateAddress(txHash)}</div>
-                    <div>
-                      Status:{" "}
-                      {isConfirming
-                        ? "Confirming..."
-                        : isConfirmed
-                          ? "Confirmed!"
-                          : "Pending"}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="mb-4">
-                <Button
                   onClick={signTyped}
                   disabled={!isConnected || isSignTypedPending}
-                  isLoading={isSignTypedPending}
                 >
                   Sign Typed Data
                 </Button>
@@ -344,7 +241,6 @@ export default function Demo(
                 <Button
                   onClick={handleSwitchChain}
                   disabled={isSwitchChainPending}
-                  isLoading={isSwitchChainPending}
                 >
                   Switch to {nextChain.name}
                 </Button>
@@ -382,11 +278,7 @@ function SignEthMessage() {
 
   return (
     <>
-      <Button
-        onClick={handleSignMessage}
-        disabled={isSignPending}
-        isLoading={isSignPending}
-      >
+      <Button onClick={handleSignMessage} disabled={isSignPending}>
         Sign Message
       </Button>
       {isSignError && renderError(signError)}
@@ -424,17 +316,13 @@ function SendEth() {
   const handleSend = useCallback(() => {
     sendTransaction({
       to: toAddr,
-      value: 100n,
+      value: 100000000000000n, // 0.0001 ETH in wei
     });
   }, [toAddr, sendTransaction]);
 
   return (
     <>
-      <Button
-        onClick={handleSend}
-        disabled={!isConnected || isSendTxPending}
-        isLoading={isSendTxPending}
-      >
+      <Button onClick={handleSend} disabled={!isConnected || isSendTxPending}>
         Send Transaction (eth)
       </Button>
       {isSendTxError && renderError(sendTxError)}
@@ -456,6 +344,8 @@ function SendEth() {
 }
 
 function ViewProfile() {
+  const { sdk } = useMiniAppSdk();
+
   const [fid, setFid] = useState("3");
 
   return (
