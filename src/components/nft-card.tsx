@@ -23,9 +23,113 @@ import * as chains from "viem/chains";
 const PLACEHOLDER_IMAGE =
   "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iI2YxZjFmMSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIGZpbGw9IiM5OTkiPk5GVCBJbWFnZTwvdGV4dD48L3N2Zz4=";
 
-// ERC721 ABI for tokenURI and name functions
+// Helper function to process and validate image URLs
+function processImageUrl(imageUrl: string): string {
+  if (!imageUrl) return "";
+  
+  // Handle IPFS URLs
+  if (imageUrl.startsWith("ipfs://")) {
+    return imageUrl.replace("ipfs://", "https://ipfs.io/ipfs/");
+  }
+  
+  // Handle malformed IPFS URLs (like the edge case mentioned)
+  if (imageUrl.includes("ipfs.io/ipfs/https://")) {
+    // Extract the actual URL after the malformed IPFS prefix
+    const actualUrl = imageUrl.split("ipfs.io/ipfs/")[1];
+    if (actualUrl && (actualUrl.startsWith("http://") || actualUrl.startsWith("https://"))) {
+      return actualUrl;
+    }
+  }
+  
+  return imageUrl;
+}
+
+// Helper function to retry contract calls with exponential backoff
+async function retryContractCall<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+  baseDelay = 1000
+): Promise<T> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error: unknown) {
+      const err = error as { details?: { code?: number }; message?: string; status?: number };
+      const isRateLimit = err?.details?.code === -32016 || 
+                         err?.message?.includes("rate limit") ||
+                         err?.status === 429;
+      
+      if (isRateLimit && i < maxRetries - 1) {
+        const delay = baseDelay * Math.pow(2, i);
+        console.warn(`Rate limited, retrying in ${delay}ms...`, err?.message);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error("Max retries exceeded");
+}
+
+// Helper function to fetch contract metadata from contractURI
+async function fetchContractMetadata(contractAddress: string, client: ReturnType<typeof createPublicClient>): Promise<NFTMetadata | null> {
+  try {
+    // Try both contractURI variations with retry logic
+    let contractURI: string = "";
+    
+    // Try contractURI (standard) first
+    try {
+      contractURI = await retryContractCall(async () => 
+        await client.readContract({
+          address: getAddress(contractAddress),
+          abi: erc721Abi,
+          functionName: "contractURI",
+        }) as string
+      );
+    } catch (uriError) {
+      console.warn("contractURI failed, trying contractUri:", uriError);
+      
+      // Try contractUri (lowercase) as fallback
+      try {
+        contractURI = await retryContractCall(async () =>
+          await client.readContract({
+            address: getAddress(contractAddress),
+            abi: erc721Abi,
+            functionName: "contractUri",
+          }) as string
+        );
+      } catch (uriLowerError) {
+        console.warn("contractUri also failed:", uriLowerError);
+      }
+    }
+
+    if (!contractURI) {
+      console.warn("No contract URI found for contract:", contractAddress);
+      return null;
+    }
+
+    // Process contractURI to get metadata URL
+    let metadataUrl = contractURI;
+    if (metadataUrl.startsWith("ipfs://")) {
+      metadataUrl = metadataUrl.replace("ipfs://", "https://ipfs.io/ipfs/");
+    }
+
+    // Fetch contract metadata
+    const response = await fetch(metadataUrl);
+    const contractMetadata = await response.json();
+    
+    return contractMetadata;
+  } catch (error) {
+    console.warn("Failed to fetch contract metadata:", error);
+    return null;
+  }
+}
+
+// ERC721 ABI for tokenURI, contractURI and name functions
 const erc721Abi = parseAbi([
   "function tokenURI(uint256 tokenId) view returns (string)",
+  "function contractURI() view returns (string)",
+  "function contractUri() view returns (string)",
   "function name() view returns (string)",
   "function symbol() view returns (string)",
   "function ownerOf(uint256 tokenId) view returns (address)",
@@ -76,7 +180,7 @@ type NFTCardProps = {
 
 export function NFTCard({
   contractAddress,
-  tokenId,
+  tokenId = "1",
   network = "ethereum", // Default to Ethereum mainnet
   alt = "NFT Image",
   className = "",
@@ -184,10 +288,20 @@ export function NFTCard({
             setNetworkName(selectedChain.name);
           }
 
-          // Create public client for the selected chain
+          // Create public client with proper transport (use Alchemy for Base)
+          const getTransportForChain = (chain: Chain) => {
+            if (chain.id === 8453) { // Base mainnet
+              const alchemyApiKey = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
+              if (alchemyApiKey) {
+                return http(`https://base-mainnet.g.alchemy.com/v2/${alchemyApiKey}`);
+              }
+            }
+            return http(); // Fallback to default
+          };
+
           const client = createPublicClient({
             chain: selectedChain,
-            transport: http(),
+            transport: getTransportForChain(selectedChain),
           });
 
           console.log(
@@ -215,12 +329,14 @@ export function NFTCard({
           // Get owner if requested
           if (showOwner) {
             try {
-              const ownerAddress = (await client.readContract({
-                address: getAddress(contractAddress),
-                abi: erc721Abi,
-                functionName: "ownerOf",
-                args: [BigInt(tokenId)],
-              })) as string;
+              const ownerAddress = await retryContractCall(async () =>
+                await client.readContract({
+                  address: getAddress(contractAddress),
+                  abi: erc721Abi,
+                  functionName: "ownerOf",
+                  args: [BigInt(tokenId)],
+                }) as string
+              );
 
               setOwner(ownerAddress);
             } catch (ownerError) {
@@ -228,44 +344,55 @@ export function NFTCard({
             }
           }
 
-          // Get tokenURI
-          const tokenURI = (await client.readContract({
-            address: getAddress(contractAddress),
-            abi: erc721Abi,
-            functionName: "tokenURI",
-            args: [BigInt(tokenId)],
-          })) as string;
+          let metadata: NFTMetadata | null = null;
 
-          // Process tokenURI to get metadata
-          let metadataUrl = tokenURI;
-
-          // Handle IPFS URLs
-          if (metadataUrl.startsWith("ipfs://")) {
-            metadataUrl = metadataUrl.replace(
-              "ipfs://",
-              "https://ipfs.io/ipfs/",
+          try {
+            // Try to get tokenURI first with retry logic
+            const tokenURI = await retryContractCall(async () =>
+              await client.readContract({
+                address: getAddress(contractAddress),
+                abi: erc721Abi,
+                functionName: "tokenURI",
+                args: [BigInt(tokenId)],
+              }) as string
             );
+
+            // Process tokenURI to get metadata
+            let metadataUrl = tokenURI;
+
+            // Handle IPFS URLs
+            if (metadataUrl.startsWith("ipfs://")) {
+              metadataUrl = metadataUrl.replace(
+                "ipfs://",
+                "https://ipfs.io/ipfs/",
+              );
+            }
+
+            // Fetch metadata
+            metadata = await fetch(metadataUrl).then((res) => res.json());
+            console.log("NFT metadata from tokenURI:", metadata);
+          } catch (tokenError) {
+            console.warn("Failed to fetch tokenURI metadata, trying contractURI fallback:", tokenError);
+            
+            // Fallback to contract metadata
+            metadata = await fetchContractMetadata(contractAddress, client);
+            if (metadata) {
+              console.log("NFT metadata from contractURI:", metadata);
+            }
           }
 
-          // Fetch metadata
-          const metadata = await fetch(metadataUrl).then((res) => res.json());
-          console.log("NFT metadata:", metadata);
+          // If no metadata found, throw error
+          if (!metadata) {
+            throw new Error("Could not fetch metadata from tokenURI or contractURI");
+          }
 
           // Call onLoad callback if provided
           if (onLoad) {
             onLoad(metadata);
           }
 
-          // Get image URL from metadata
-          let nftImageUrl = metadata.image;
-
-          // Handle IPFS URLs for image
-          if (nftImageUrl && nftImageUrl.startsWith("ipfs://")) {
-            nftImageUrl = nftImageUrl.replace(
-              "ipfs://",
-              "https://ipfs.io/ipfs/",
-            );
-          }
+          // Get image URL from metadata and process it
+          const nftImageUrl = processImageUrl(metadata.image || "");
 
           if (nftImageUrl) {
             setImageUrl(nftImageUrl);

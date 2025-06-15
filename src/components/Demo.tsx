@@ -78,7 +78,11 @@ export default function Demo(
 
   const close = useCallback(() => {
     sdk.actions.close();
-  }, []);
+  }, [sdk.actions]);
+
+  const openNFTPage = useCallback(() => {
+    sdk.actions.openUrl(`${window.location.origin}/nft`);
+  }, [sdk.actions]);
 
   const sendNotification = useCallback(async () => {
     setSendNotificationResult("");
@@ -157,6 +161,12 @@ export default function Demo(
 
         <div>
           <h2 className="font-2xl font-bold">Actions</h2>
+
+          <div className="mb-4">
+            <Button onClick={openNFTPage}>
+              View NFT Page
+            </Button>
+          </div>
 
           <div className="mb-4">
             <ViewProfile />

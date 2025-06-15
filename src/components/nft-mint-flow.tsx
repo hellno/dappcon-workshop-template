@@ -15,6 +15,8 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
   useReadContract,
+  useChainId,
+  useSwitchChain,
 } from "wagmi";
 import { formatEther, type Address } from "viem";
 import { farcasterFrame } from "@farcaster/frame-wagmi-connector";
@@ -38,6 +40,7 @@ type MintStep =
   | "initial"
   | "sheet"
   | "connecting"
+  | "switching"
   | "minting"
   | "waiting"
   | "success"
@@ -73,6 +76,20 @@ const priceAbi = [
     stateMutability: "view",
     type: "function",
   },
+  {
+    inputs: [],
+    name: "protocolFee",
+    outputs: [{ type: "uint256", name: "fee" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "amount", type: "uint256" }],
+    name: "mintFee",
+    outputs: [{ type: "uint256", name: "fee" }],
+    stateMutability: "view",
+    type: "function",
+  },
 ] as const;
 
 export function NFTMintFlow({
@@ -94,6 +111,8 @@ export function NFTMintFlow({
   const { isSDKLoaded } = useMiniAppSdk();
   const { isConnected } = useAccount();
   const { connect } = useConnect();
+  const currentChainId = useChainId();
+  const { switchChain, isPending: isSwitchChainPending } = useSwitchChain();
   const {
     writeContract,
     isPending: isWritePending,
@@ -176,29 +195,64 @@ export function NFTMintFlow({
       },
     });
 
-  const contractPrice =
-    mintPrice === BigInt(0)
-      ? BigInt(0)
-      : mintPrice
-        ? mintPrice
-        : price === BigInt(0)
-          ? BigInt(0)
-          : price
-            ? price
-            : MINT_PRICE === BigInt(0)
-              ? BigInt(0)
-              : MINT_PRICE
-                ? MINT_PRICE
-                : getMintPrice === BigInt(0)
-                  ? BigInt(0)
-                  : getMintPrice
-                    ? getMintPrice
-                    : undefined;
+  // Additional fee reads for fallback pricing
+  const { data: protocolFee, isLoading: isProtocolFeeLoading } =
+    useReadContract({
+      address: contractAddress,
+      abi: priceAbi,
+      functionName: "protocolFee",
+      chainId,
+      query: {
+        enabled: !!contractAddress && !!chainId,
+        retry: 3,
+        retryDelay: 1000,
+      },
+    });
+
+  const { data: mintFee, isLoading: isMintFeeLoading } =
+    useReadContract({
+      address: contractAddress,
+      abi: priceAbi,
+      functionName: "mintFee",
+      args: [BigInt(amount)],
+      chainId,
+      query: {
+        enabled: !!contractAddress && !!chainId,
+        retry: 3,
+        retryDelay: 1000,
+      },
+    });
+
+  // Calculate final contract price with fallback to protocolFee + mintFee
+  const contractPrice = (() => {
+    // Try standard price functions first
+    if (mintPrice && mintPrice > BigInt(0)) return mintPrice;
+    if (price && price > BigInt(0)) return price;
+    if (MINT_PRICE && MINT_PRICE > BigInt(0)) return MINT_PRICE;
+    if (getMintPrice && getMintPrice > BigInt(0)) return getMintPrice;
+    
+    // Fallback to fee-based calculation: protocolFee + mintFee(amount)
+    if (protocolFee !== undefined && mintFee !== undefined) {
+      return protocolFee + mintFee; // mintFee already accounts for amount
+    }
+    
+    // Handle zero prices
+    if (mintPrice === BigInt(0)) return BigInt(0);
+    if (price === BigInt(0)) return BigInt(0);
+    if (MINT_PRICE === BigInt(0)) return BigInt(0);
+    if (getMintPrice === BigInt(0)) return BigInt(0);
+    if (protocolFee === BigInt(0) && mintFee === BigInt(0)) return BigInt(0);
+    
+    return undefined; // No price data available
+  })();
+
   const isLoadingPrice =
     isMintPriceLoading ||
     isPriceLoading ||
     isMintPriceConstLoading ||
-    isGetMintPriceLoading;
+    isGetMintPriceLoading ||
+    isProtocolFeeLoading ||
+    isMintFeeLoading;
 
   const {
     isSuccess: isTxSuccess,
@@ -209,9 +263,20 @@ export function NFTMintFlow({
   });
 
   // Calculate total cost
-  const totalCost = contractPrice
-    ? (Number(formatEther(contractPrice)) * amount).toString()
-    : "0";
+  const totalCost = (() => {
+    if (!contractPrice) return "0";
+    
+    // If using fee-based pricing (protocolFee + mintFee), mintFee already accounts for amount
+    const isUsingFeePricing = protocolFee !== undefined && mintFee !== undefined && 
+                             !mintPrice && !price && !MINT_PRICE && !getMintPrice;
+    
+    if (isUsingFeePricing) {
+      return Number(formatEther(contractPrice)).toFixed(4);
+    } else {
+      // For regular pricing, multiply by amount
+      return (Number(formatEther(contractPrice)) * amount).toFixed(4);
+    }
+  })();
 
   // Reset error when step changes
   React.useEffect(() => {
@@ -300,8 +365,36 @@ export function NFTMintFlow({
       return;
     }
 
+    // Check if we're on the correct chain
+    if (currentChainId !== chainId) {
+      console.log(`Chain mismatch: current ${currentChainId}, target ${chainId}`);
+      try {
+        setStep("switching");
+        console.log("Switching to chain:", chainId);
+        await switchChain({ chainId });
+        // Wait a moment for chain switch to complete
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (switchError) {
+        console.error("Failed to switch chain:", switchError);
+        setError(
+          `Please switch to the correct network in your wallet. ` +
+          `Current: Chain ${currentChainId}, Required: Chain ${chainId}`
+        );
+        setStep("error");
+        return;
+      }
+    }
+
     try {
       setStep("minting");
+
+      // Calculate the correct value to send
+      const isUsingFeePricing = protocolFee !== undefined && mintFee !== undefined && 
+                               !mintPrice && !price && !MINT_PRICE && !getMintPrice;
+      
+      const valueToSend = isUsingFeePricing 
+        ? contractPrice // mintFee already accounts for amount
+        : contractPrice * BigInt(amount); // multiply for regular pricing
 
       // Simple mint function call - adjust ABI based on your NFT contract
       writeContract({
@@ -317,7 +410,7 @@ export function NFTMintFlow({
         ] as const,
         functionName: "mint",
         args: [BigInt(amount)],
-        value: contractPrice * BigInt(amount),
+        value: valueToSend,
         chainId,
       });
 
@@ -383,6 +476,7 @@ export function NFTMintFlow({
           <SheetTitle>
             {step === "sheet" && "Mint NFT"}
             {step === "connecting" && "Connecting Wallet"}
+            {step === "switching" && "Switching Network"}
             {step === "minting" && "Preparing Mint"}
             {step === "waiting" && "Minting..."}
             {step === "success" && "Mint Successful!"}
@@ -416,6 +510,21 @@ export function NFTMintFlow({
                         : "Error loading price"}
                 </span>
               </div>
+              
+              {/* Show fee breakdown if using protocolFee + mintFee */}
+              {protocolFee !== undefined && mintFee !== undefined && 
+               !mintPrice && !price && !MINT_PRICE && !getMintPrice && (
+                <div className="py-2 text-sm text-neutral-500 dark:text-neutral-400">
+                  <div className="flex justify-between">
+                    <span>Protocol Fee:</span>
+                    <span>{Number(formatEther(protocolFee)).toFixed(4)} ETH</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Mint Fee ({amount}):</span>
+                    <span>{Number(formatEther(mintFee)).toFixed(4)} ETH</span>
+                  </div>
+                </div>
+              )}
               <div className="flex justify-between items-center py-3 text-lg font-semibold">
                 <span>Total Cost</span>
                 <span>{totalCost} ETH</span>
@@ -452,7 +561,25 @@ export function NFTMintFlow({
           </div>
         )}
 
-        {/* Step 3/4: Minting */}
+        {/* Step 3.5: Switching Network */}
+        {step === "switching" && (
+          <div className="text-center space-y-4">
+            <div className="flex justify-center">
+              <Loader2 className="h-12 w-12 animate-spin text-neutral-900 dark:text-neutral-50" />
+            </div>
+            <div>
+              <p className="font-semibold">Switching to correct network</p>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                Please approve the network switch in your wallet
+              </p>
+              <p className="text-xs text-neutral-400 mt-2">
+                Chain ID: {chainId}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Minting */}
         {step === "minting" && (
           <div className="text-center space-y-4">
             <div className="flex justify-center">
@@ -531,9 +658,28 @@ export function NFTMintFlow({
               >
                 Close
               </Button>
-              <Button onClick={handleRetry} className="flex-1">
-                Try Again
-              </Button>
+              {/* Show switch network button if it's a chain mismatch error */}
+              {error && error.includes("Chain") && currentChainId !== chainId ? (
+                <Button 
+                  onClick={async () => {
+                    try {
+                      setStep("switching");
+                      await switchChain({ chainId });
+                      setStep("sheet");
+                    } catch {
+                      setError("Failed to switch network. Please switch manually in your wallet.");
+                    }
+                  }}
+                  className="flex-1"
+                  disabled={isSwitchChainPending}
+                >
+                  Switch Network
+                </Button>
+              ) : (
+                <Button onClick={handleRetry} className="flex-1">
+                  Try Again
+                </Button>
+              )}
             </div>
           </div>
         )}
