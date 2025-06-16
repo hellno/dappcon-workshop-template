@@ -10,7 +10,7 @@ const frame = {
     title: "Launch Frame",
     action: {
       type: "launch_frame",
-      name: "DappCon Mini App Template",
+      name: "Find Friends on Circles",
       url: appUrl,
       splashImageUrl: `${appUrl}/splash.png`,
       splashBackgroundColor: "#f7f7f7",
@@ -22,10 +22,10 @@ export const revalidate = 300;
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
-    title: "DappCon Mini App Template",
+    title: "Find Friends on Circles",
     openGraph: {
-      title: "DappCon Mini App Template",
-      description: "by hellno.eth",
+      title: "Find Friends on Circles",
+      description: "Discover which of your friends are on Circles protocol",
     },
     other: {
       "fc:frame": JSON.stringify(frame),

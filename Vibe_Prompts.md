@@ -15,5 +15,5 @@ give me two suggested solutions how we can improve this and simplify and follow 
 
 ## Clarify
 ```
-Ask any clarifying questions before proceeding. Do not write any code, just respond back.
+Ask me any clarifying questions for facts or details that you must know before proceeding confidently. Do not write any code, just respond back.
 ```
