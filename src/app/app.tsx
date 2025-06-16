@@ -9,7 +9,7 @@ const Demo = dynamic(() => import("~/components/Demo"), {
 
 export default function App(
   { title }: { title?: string } = {
-    title: "DappCon Mini App Workshop Template",
+    title: "DappCon Mini App Template",
   },
 ) {
   ReactDOM.preconnect("https://auth.farcaster.xyz");
