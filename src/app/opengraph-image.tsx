@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "Find your Farcaster friends on Circles";
+export const alt = "Your Friends on Circles";
 export const size = {
   width: 1200,
   height: 630,
@@ -19,14 +19,13 @@ export default async function Image() {
         <div tw="flex flex-col items-center text-center z-10">
           {/* Title */}
           <h1 tw="text-6xl font-bold text-white mb-4">
-            Find Your Farcaster Friends
+            Your Friends
           </h1>
           <h2 tw="text-5xl font-bold text-white mb-8">on Circles</h2>
 
           {/* Subtitle */}
           <p tw="text-2xl text-white opacity-90 mb-12 max-w-4xl">
-            Discover which people you follow are part of the Circles trust
-            network
+            Discover which of your friends are on Circles protocol
           </p>
 
           {/* Feature highlights */}
@@ -35,7 +34,7 @@ export default async function Image() {
               <div tw="w-8 h-8 bg-white rounded-full flex items-center justify-center">
                 <span tw="text-2xl">👥</span>
               </div>
-              <span tw="text-xl text-white">Following List</span>
+              <span tw="text-xl text-white">Your Friends</span>
             </div>
 
             <div tw="text-4xl text-white">+</div>

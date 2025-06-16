@@ -176,15 +176,15 @@ export function FriendsList() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
-            People You Follow
+            Your Friends on Circles
           </CardTitle>
-          <CardDescription>Your Farcaster following list</CardDescription>
+          <CardDescription>Find which friends are on Circles protocol</CardDescription>
         </CardHeader>
         <CardContent className="p-4">
           {friends && (
             <div className="flex gap-2 mb-4 flex-wrap">
               <Badge variant="default" className="text-xs">
-                {friends.stats.following} following
+                {friends.stats.following} friends
               </Badge>
               <Badge variant="secondary" className="text-xs">
                 {
@@ -216,7 +216,7 @@ export function FriendsList() {
             ) : (
               <>
                 <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh Following
+                Refresh Friends
               </>
             )}
           </Button>
@@ -280,7 +280,7 @@ export function FriendsList() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => handleViewProfile(friend.username)}
+                      onClick={() => handleViewProfile(friend.fid)}
                       className="shrink-0"
                       title="View Farcaster profile"
                     >
@@ -295,10 +295,10 @@ export function FriendsList() {
               <div className="text-center py-8">
                 <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                 <p className="text-muted-foreground">
-                  You&apos;re not following anyone yet
+                  No friends found yet
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Start following people on Farcaster to see them here
+                  Follow people on Farcaster to discover friends here
                 </p>
               </div>
             )}

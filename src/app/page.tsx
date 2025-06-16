@@ -10,7 +10,7 @@ const frame = {
     title: "Launch Frame",
     action: {
       type: "launch_frame",
-      name: "Your Farcaster Following",
+      name: "Find Friends on Circles",
       url: appUrl,
       splashImageUrl: `${appUrl}/splash.png`,
       splashBackgroundColor: "#f7f7f7",
@@ -22,10 +22,10 @@ export const revalidate = 300;
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
-    title: "Your Farcaster Following",
+    title: "Find Friends on Circles",
     openGraph: {
-      title: "Your Farcaster Following",
-      description: "See who you follow on Farcaster",
+      title: "Find Friends on Circles",
+      description: "Discover which of your friends are on Circles protocol",
     },
     other: {
       "fc:frame": JSON.stringify(frame),
