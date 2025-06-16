@@ -58,7 +58,22 @@ export async function GET(request: NextRequest) {
     
     // Enhanced logging for API errors
     if (error && typeof error === 'object' && 'response' in error) {
-      const apiError = error as any;
+      const apiError = error as { 
+        status?: number; 
+        message: string; 
+        response?: { 
+          status?: number; 
+          data?: unknown; 
+          headers?: unknown; 
+        }; 
+        config?: { 
+          url?: string; 
+          method?: string; 
+          headers?: unknown; 
+          data?: unknown; 
+          params?: unknown; 
+        }; 
+      };
       console.error("=== NEYNAR API ERROR DETAILS ===");
       console.error("Status:", apiError.status);
       console.error("Status Code:", apiError.response?.status);

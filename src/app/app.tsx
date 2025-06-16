@@ -7,11 +7,7 @@ const FriendsList = dynamic(() => import("~/components/friends-list").then(mod =
   ssr: false,
 });
 
-export default function App(
-  { title }: { title?: string } = {
-    title: "Your Farcaster Following",
-  },
-) {
+export default function App() {
   ReactDOM.preconnect("https://auth.farcaster.xyz");
 
   return (

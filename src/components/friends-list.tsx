@@ -22,7 +22,6 @@ import { toast } from "sonner";
 import {
   batchCheckCirclesStatus,
   type CirclesData,
-  type DebugData,
 } from "~/lib/circles-lookup";
 
 interface FarcasterUser {
@@ -41,7 +40,6 @@ interface FarcasterUser {
     eth_addresses: string[];
   };
   circlesData?: CirclesData;
-  debugData?: DebugData;
 }
 
 interface FriendsData {
@@ -95,7 +93,6 @@ export function FriendsList() {
             return {
               ...friend,
               circlesData: result?.circlesData || { isOnCircles: false },
-              debugData: result?.debugData || { addressChecks: [] },
             };
           });
 
@@ -134,8 +131,8 @@ export function FriendsList() {
     }
   }, [isSDKLoaded, context?.user?.fid, fetchFriends]);
 
-  const handleViewProfile = (username: string) => {
-    sdk.actions.openUrl(`https://warpcast.com/${username}`);
+  const handleViewProfile = async (fid: number) => {
+    await sdk.actions.viewProfile({ fid });
   };
 
   const handleOpenMetri = useCallback(
@@ -174,7 +171,7 @@ export function FriendsList() {
   }
 
   return (
-    <div className="w-full max-w-md space-y-4">
+    <div className="w-full max-w-lg mx-auto px-2 space-y-4">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -183,13 +180,13 @@ export function FriendsList() {
           </CardTitle>
           <CardDescription>Your Farcaster following list</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4">
           {friends && (
             <div className="flex gap-2 mb-4 flex-wrap">
-              <Badge variant="default">
+              <Badge variant="default" className="text-xs">
                 {friends.stats.following} following
               </Badge>
-              <Badge variant="secondary">
+              <Badge variant="secondary" className="text-xs">
                 {
                   friends.friends.filter((f) => f.circlesData?.isOnCircles)
                     .length
@@ -197,9 +194,9 @@ export function FriendsList() {
                 on Circles
               </Badge>
               {circlesLoading && (
-                <Badge variant="outline">
+                <Badge variant="outline" className="text-xs">
                   <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                  Checking Circles...
+                  Checking...
                 </Badge>
               )}
             </div>
@@ -208,7 +205,8 @@ export function FriendsList() {
           <Button
             onClick={fetchFriends}
             disabled={loading}
-            className="w-full mb-4"
+            className="w-full mb-4 text-sm"
+            size="sm"
           >
             {loading ? (
               <>
@@ -223,7 +221,7 @@ export function FriendsList() {
             )}
           </Button>
 
-          <div className="space-y-3 max-h-96 overflow-y-auto">
+          <div className="space-y-2 max-h-[70vh] overflow-y-auto">
             {friends?.friends.map((friend) => (
               <div key={friend.fid} className="rounded-lg border">
                 <div className="flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors">
@@ -297,7 +295,7 @@ export function FriendsList() {
               <div className="text-center py-8">
                 <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                 <p className="text-muted-foreground">
-                  You're not following anyone yet
+                  You&apos;re not following anyone yet
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   Start following people on Farcaster to see them here

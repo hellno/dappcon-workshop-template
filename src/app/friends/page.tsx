@@ -1,8 +1,6 @@
-import dynamic from "next/dynamic";
+"use client";
 
-const FriendsList = dynamic(() => import("~/components/friends-list").then(mod => ({ default: mod.FriendsList })), {
-  ssr: false,
-});
+import { FriendsList } from "~/components/friends-list";
 
 export default function FriendsPage() {
   return (

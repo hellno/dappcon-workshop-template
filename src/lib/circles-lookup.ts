@@ -1,17 +1,35 @@
 // Note: This implementation uses direct HTTP API calls to Circles RPC endpoints
 // and does NOT require the Circles SDK or window.ethereum provider
+interface CirclesProfile {
+  name: string;
+  description?: string;
+  avatar?: string;
+  [key: string]: unknown;
+}
+
+interface CirclesEvent {
+  event: string;
+  values?: {
+    owner?: string;
+    safeAddress?: string;
+    [key: string]: unknown;
+  };
+  blockNumber?: number;
+  [key: string]: unknown;
+}
+
 export interface CirclesData {
   isOnCircles: boolean;
   mainAddress?: string;
-  profileData?: any;
+  profileData?: CirclesProfile;
   signerAddress?: string;
 }
 
 export interface DebugData {
   addressChecks: Array<{
     address: string;
-    directCheck: { exists: boolean; profileData?: any };
-    signerCheck: { exists: boolean; mainAddress?: string; profileData?: any };
+    directCheck: { exists: boolean; profileData?: CirclesProfile };
+    signerCheck: { exists: boolean; mainAddress?: string; profileData?: CirclesProfile };
   }>;
 }
 
@@ -166,7 +184,7 @@ async function checkSignerToMainAccount(signerAddress: string) {
     console.log(`📋 Total events found: ${eventsData.result.length}`);
     
     // Log all events to see what we're getting
-    eventsData.result.forEach((event: any, index: number) => {
+    eventsData.result.forEach((event: CirclesEvent, index: number) => {
       console.log(`Event ${index}:`, {
         event: event.event,
         values: event.values,
@@ -174,13 +192,13 @@ async function checkSignerToMainAccount(signerAddress: string) {
       });
     });
     
-    const ownerEvents = eventsData.result.filter((event: any) =>
+    const ownerEvents = eventsData.result.filter((event: CirclesEvent) =>
       event.event === "Safe_AddedOwner" &&
       event.values?.owner?.toLowerCase() === signerAddress.toLowerCase()
     );
     
     console.log(`🎯 Safe_AddedOwner events for ${signerAddress}: ${ownerEvents.length}`);
-    ownerEvents.forEach((event: any, index: number) => {
+    ownerEvents.forEach((event: CirclesEvent, index: number) => {
       console.log(`  Owner Event ${index}:`, {
         safeAddress: event.values?.safeAddress,
         owner: event.values?.owner,
@@ -190,7 +208,9 @@ async function checkSignerToMainAccount(signerAddress: string) {
     
     // Check each Safe address for Circles profile
     for (const event of ownerEvents) {
-      const safeAddress = event.values.safeAddress;
+      const safeAddress = event.values?.safeAddress;
+      if (!safeAddress) continue;
+      
       console.log(`🔐 Checking Safe profile for: ${safeAddress}`);
       
       const safeProfile = await checkDirectCirclesProfile(safeAddress);
