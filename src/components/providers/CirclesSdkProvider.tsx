@@ -39,6 +39,13 @@ export const CirclesSDK = ({ children }: { children: ReactNode }) => {
     // Function to initialize the SDK
     const initSdk = useCallback(async () => {
         try {
+            // Check if we're in a browser environment with ethereum provider
+            if (typeof window === 'undefined' || !(window as any).ethereum) {
+                console.log("No ethereum provider found, skipping Circles SDK initialization");
+                setIsConnected(false);
+                return;
+            }
+
             // Create and initialize the adapter
             const adapter = new BrowserProviderContractRunner();
             await adapter.init(); // Initialize the adapter before using it
@@ -56,14 +63,21 @@ export const CirclesSDK = ({ children }: { children: ReactNode }) => {
             const sdk = new Sdk(adapter, circlesConfig);
             setSdk(sdk);
             setIsConnected(true);
+            console.log("Circles SDK initialized successfully");
         } catch (error) {
-            console.error("Error initializing SDK:", error);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            console.log("Circles SDK initialization failed (this is OK for friends list functionality):", errorMessage);
             setIsConnected(false);
         }
     }, []);
 
     useEffect(() => {
-        initSdk();
+        // Delay SDK initialization to give Frame environment time to set up
+        const timer = setTimeout(() => {
+            initSdk();
+        }, 1000); // 1 second delay
+
+        return () => clearTimeout(timer);
     }, [initSdk]);
 
     return (

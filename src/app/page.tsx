@@ -10,7 +10,7 @@ const frame = {
     title: "Launch Frame",
     action: {
       type: "launch_frame",
-      name: "DappCon Mini App Workshop Template",
+      name: "Your Farcaster Following",
       url: appUrl,
       splashImageUrl: `${appUrl}/splash.png`,
       splashBackgroundColor: "#f7f7f7",
@@ -22,10 +22,10 @@ export const revalidate = 300;
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
-    title: "DappCon Mini App Workshop Template",
+    title: "Your Farcaster Following",
     openGraph: {
-      title: "DappCon Mini App Workshop Template",
-      description: "by hellno.eth",
+      title: "Your Farcaster Following",
+      description: "See who you follow on Farcaster",
     },
     other: {
       "fc:frame": JSON.stringify(frame),

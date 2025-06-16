@@ -26,6 +26,7 @@
     "@farcaster/mini-app-solana": "^0.0.13",
     "@farcaster/quick-auth": "^0.0.2",
     "@hookform/resolvers": "^5.1.1",
+    "@neynar/nodejs-sdk": "^2.46.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-aspect-ratio": "^1.1.7",

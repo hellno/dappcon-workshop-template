@@ -84,6 +84,10 @@ export default function Demo(
     sdk.actions.openUrl(`${window.location.origin}/nft`);
   }, [sdk.actions]);
 
+  const openFriendsPage = useCallback(() => {
+    sdk.actions.openUrl(`${window.location.origin}/friends`);
+  }, [sdk.actions]);
+
   const sendNotification = useCallback(async () => {
     setSendNotificationResult("");
     if (!notificationDetails || !context) {
@@ -165,6 +169,12 @@ export default function Demo(
           <div className="mb-4">
             <Button onClick={openNFTPage}>
               View NFT Page
+            </Button>
+          </div>
+
+          <div className="mb-4">
+            <Button onClick={openFriendsPage}>
+              View Friends
             </Button>
           </div>
 

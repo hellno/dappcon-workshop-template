@@ -258,13 +258,13 @@ export default function DemoCirclesPage() {
       console.log("📋 Fetching profile data for:", address);
 
       // First, try direct lookup
-      let profileApiUrl = `https://rpc.aboutcircles.com/profiles/search?address=${address}`;
+      const profileApiUrl = `https://rpc.aboutcircles.com/profiles/search?address=${address}`;
       console.log("📡 Strategy 1 - Direct profile lookup:", profileApiUrl);
 
-      let response = await fetch(profileApiUrl);
+      const response = await fetch(profileApiUrl);
       console.log("📊 Direct profile response status:", response.status);
 
-      let mainCirclesAddress = address;
+      const mainCirclesAddress = address;
 
       if (response.ok) {
         const data = await response.json();
