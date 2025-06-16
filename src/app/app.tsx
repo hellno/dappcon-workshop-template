@@ -3,9 +3,15 @@
 import dynamic from "next/dynamic";
 import ReactDOM from "react-dom";
 
-const FriendsList = dynamic(() => import("~/components/friends-list").then(mod => ({ default: mod.FriendsList })), {
-  ssr: false,
-});
+const FriendsList = dynamic(
+  () =>
+    import("~/components/friends-list").then((mod) => ({
+      default: mod.FriendsList,
+    })),
+  {
+    ssr: false,
+  },
+);
 
 export default function App() {
   ReactDOM.preconnect("https://auth.farcaster.xyz");

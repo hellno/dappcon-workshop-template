@@ -5,7 +5,7 @@ import { Providers } from "~/app/providers";
 import { Toaster } from "~/components/ui/sonner";
 
 export const metadata: Metadata = {
-  title: "DappCon Mini App Workshop Template",
+  title: "DappCon Mini App Template",
   description: "by hellno.eth",
 };
 

@@ -1,17 +1,17 @@
 export async function GET() {
   const appUrl = process.env.NEXT_PUBLIC_URL;
-
   const config = {
     accountAssociation: {
       header:
-        "eyJmaWQiOjM2MjEsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHgyY2Q4NWEwOTMyNjFmNTkyNzA4MDRBNkVBNjk3Q2VBNENlQkVjYWZFIn0",
-      payload: "eyJkb21haW4iOiJmcmFtZXMtdjIudmVyY2VsLmFwcCJ9",
+        "eyJmaWQiOjEzNTk2LCJ0eXBlIjoiY3VzdG9keSIsImtleSI6IjB4ODE3MzE4RDZmRkY2NkExOGQ4M0ExMzc2QTc2RjZlMzBCNDNjODg4OSJ9",
+      payload:
+        "eyJkb21haW4iOiJkYXBwY29uLXdvcmtzaG9wLXRlbXBsYXRlLnZlcmNlbC5hcHAifQ",
       signature:
-        "MHhiNDIwMzQ1MGZkNzgzYTExZjRiOTllZTFlYjA3NmMwOTdjM2JkOTY1NGM2ODZjYjkyZTAyMzk2Y2Q0YjU2MWY1MjY5NjI5ZGQ5NTliYjU0YzEwOGI4OGVmNjdjMTVlZTdjZDc2YTRiMGU5NzkzNzA3YzkxYzFkOWFjNTg0YmQzNjFi",
+        "MHg0M2ZhZTNlMTk1ZjU0ZDlmMmVlOTM2OGQyN2JjNDIxNGNlODdkOWYyYmE0ZGQxYjg0NGYxOWRiNzMwYTMwNWEyMDljY2E3MDczYThkYjVlMjFiNWJlNTY3N2VkNjIwOTEwZTFkZTRhOGM3MzczZWRkMzUxZTZhNWYwYzA3ZmZjNjFj",
     },
     frame: {
       version: "1",
-      name: "DappCon Mini App Workshop Template",
+      name: "DappCon Mini App Template",
       iconUrl: `${appUrl}/icon.png`,
       homeUrl: appUrl,
       imageUrl: `${appUrl}/frames/hello/opengraph-image`,
