@@ -1,15 +1,7 @@
 // Note: This implementation uses direct HTTP API calls to Circles RPC endpoints
 // and does NOT require the Circles SDK or window.ethereum provider
 
-// Cache for address lookups (in-memory, session-based)
-const addressCache = new Map<string, {
-  result: { exists: boolean; profileData?: CirclesProfile; mainAddress?: string };
-  timestamp: number;
-  type: 'direct' | 'signer';
-}>();
-
-// Cache TTL: 10 minutes
-const CACHE_TTL = 10 * 60 * 1000;
+import { unstable_cache } from 'next/cache';
 
 interface CirclesProfile {
   name: string;
@@ -112,19 +104,12 @@ export async function checkCirclesStatusWithDebug(ethAddresses: string[]): Promi
   };
 }
 
-async function checkDirectCirclesProfile(address: string) {
-  const cacheKey = `direct:${address.toLowerCase()}`;
-  
-  // Check cache first
-  const cached = addressCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    console.log(`💾 Cache hit for direct lookup: ${address}`);
-    return cached.result;
-  }
-  
+// Cached version of direct profile lookup - Next.js cache with 24 hour TTL
+const checkDirectCirclesProfile = unstable_cache(
+  async (address: string) => {
   try {
     const url = `https://rpc.aboutcircles.com/profiles/search?address=${address}`;
-    console.log(`🔍 Direct profile lookup for: ${address}`);
+    console.log(`🔍 Direct profile lookup for: ${address} (cache miss - making API call)`);
     console.log(`📡 Profile URL: ${url}`);
     
     const response = await fetch(url);
@@ -143,32 +128,18 @@ async function checkDirectCirclesProfile(address: string) {
     if (Array.isArray(data) && data.length > 0 && data[0].name) {
       const profile = data[0];
       console.log(`✅ Found Circles profile for ${address}:`, profile.name);
-      const result = {
+      return {
         exists: true,
         profileData: profile
       };
-      // Cache the result
-      addressCache.set(cacheKey, {
-        result,
-        timestamp: Date.now(),
-        type: 'direct'
-      });
-      return result;
     }
     // Check if data is a direct profile object
     else if (data && data.name) {
       console.log(`✅ Found Circles profile for ${address}:`, data.name);
-      const result = {
+      return {
         exists: true,
         profileData: data
       };
-      // Cache the result
-      addressCache.set(cacheKey, {
-        result,
-        timestamp: Date.now(),
-        type: 'direct'
-      });
-      return result;
     } else {
       console.log(`❌ No profile name found for ${address}. Data structure:`, {
         isArray: Array.isArray(data),
@@ -181,29 +152,20 @@ async function checkDirectCirclesProfile(address: string) {
     console.log(`💥 Direct lookup failed for ${address}:`, error);
   }
   
-  // Cache negative result
-  const result = { exists: false };
-  addressCache.set(cacheKey, {
-    result,
-    timestamp: Date.now(),
-    type: 'direct'
-  });
-  
-  return result;
-}
-
-async function checkSignerToMainAccount(signerAddress: string) {
-  const cacheKey = `signer:${signerAddress.toLowerCase()}`;
-  
-  // Check cache first
-  const cached = addressCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    console.log(`💾 Cache hit for signer lookup: ${signerAddress}`);
-    return cached.result;
+  return { exists: false };
+  },
+  ['direct-circles-profile'], // Cache key will be parameterized by address automatically
+  {
+    revalidate: 86400, // 24 hours
+    tags: ['circles-profile']
   }
-  
+);
+
+// Cached version of signer to main account lookup - Next.js cache with 24 hour TTL
+const checkSignerToMainAccount = unstable_cache(
+  async (signerAddress: string) => {
   try {
-    console.log(`🔍 Checking signer events for: ${signerAddress}`);
+    console.log(`🔍 Checking signer events for: ${signerAddress} (cache miss - making API call)`);
     
     // Use circles_events to find Safe_AddedOwner events
     const response = await fetch("https://rpc.aboutcircles.com", {
@@ -268,18 +230,11 @@ async function checkSignerToMainAccount(signerAddress: string) {
       
       if (safeProfile.exists) {
         console.log(`✅ Found Circles profile via Safe: ${safeAddress}`);
-        const result = {
+        return {
           exists: true,
           mainAddress: safeAddress,
           profileData: safeProfile.profileData
         };
-        // Cache the result
-        addressCache.set(cacheKey, {
-          result,
-          timestamp: Date.now(),
-          type: 'signer'
-        });
-        return result;
       } else {
         console.log(`❌ No Circles profile found for Safe: ${safeAddress}`);
       }
@@ -290,16 +245,14 @@ async function checkSignerToMainAccount(signerAddress: string) {
     console.log(`💥 Signer lookup failed for ${signerAddress}:`, error);
   }
   
-  // Cache negative result
-  const result = { exists: false };
-  addressCache.set(cacheKey, {
-    result,
-    timestamp: Date.now(),
-    type: 'signer'
-  });
-  
-  return result;
-}
+  return { exists: false };
+  },
+  ['signer-circles-lookup'], // Cache key will be parameterized by signerAddress automatically
+  {
+    revalidate: 86400, // 24 hours
+    tags: ['circles-signer']
+  }
+);
 
 // Batch processing function to avoid overwhelming the API
 export async function batchCheckCirclesStatus(

@@ -11,16 +11,14 @@ export const contentType = "image/png";
 export default async function Image() {
   return new ImageResponse(
     (
-      <div tw="h-full w-full flex flex-col justify-center items-center relative bg-gradient-to-br from-purple-600 via-blue-600 to-green-600">
+      <div tw="h-full w-full flex flex-col justify-center items-center relative bg-purple-600">
         {/* Background pattern */}
         <div tw="absolute inset-0 bg-black bg-opacity-10"></div>
 
         {/* Main content */}
         <div tw="flex flex-col items-center text-center z-10">
           {/* Title */}
-          <h1 tw="text-6xl font-bold text-white mb-4">
-            Your Friends
-          </h1>
+          <h1 tw="text-6xl font-bold text-white mb-4">Your Friends</h1>
           <h2 tw="text-5xl font-bold text-white mb-8">on Circles</h2>
 
           {/* Subtitle */}
