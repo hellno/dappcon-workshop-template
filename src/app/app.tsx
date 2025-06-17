@@ -17,7 +17,7 @@ export default function App() {
   ReactDOM.preconnect("https://auth.farcaster.xyz");
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-4 bg-background">
+    <main className="min-h-screen flex flex-col items-center justify-center bg-background">
       <FriendsList />
     </main>
   );
