@@ -294,10 +294,10 @@ async function getCurrentUserTrustList(currentUserAddress: string): Promise<Set<
       );
       
       // Extract unique trustee addresses
-      const trustedAddresses = new Set(
+      const trustedAddresses = new Set<string>(
         trustEvents
           .map((event: any) => event.values?.trustee?.toLowerCase())
-          .filter(Boolean)
+          .filter((address: string): address is string => Boolean(address))
       );
       
       console.log(`✅ Found ${trustedAddresses.size} trusted addresses for ${currentUserAddress}`);

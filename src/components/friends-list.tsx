@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useMiniAppSdk } from "~/hooks/use-miniapp-sdk";
 import {
   Card,
@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Switch } from "~/components/ui/switch";
-import { Users, RefreshCw, ExternalLink, Heart } from "lucide-react";
+import { Users, RefreshCw, ExternalLink, Heart, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { streamCirclesStatus, type CirclesData } from "~/lib/circles-lookup";
 
@@ -66,6 +66,7 @@ export function FriendsList() {
   const [friendsCursor, setFriendsCursor] = useState<string | null>(null);
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Progressive friend loading with pagination
   const loadMoreFriends = useCallback(
@@ -143,7 +144,7 @@ export function FriendsList() {
         setLoadingFriends(false);
       }
     },
-    [context?.user?.fid],
+    [context?.user?.fid, startCirclesProcessing],
   );
 
   // Start fresh friend loading
@@ -177,8 +178,7 @@ export function FriendsList() {
       setAbortController(controller);
 
       // Get current user's verified addresses for trust checking
-      const currentUserAddresses =
-        context?.user?.verified_addresses?.eth_addresses || [];
+      const currentUserAddresses: string[] = [];
 
       try {
         for await (const update of streamCirclesStatus(
@@ -233,14 +233,33 @@ export function FriendsList() {
         setAbortController(null);
       }
     },
-    [],
-  ); // Remove allFriends dependency - not needed
+    [allFriends],
+  );
+
+  // Scroll detection for auto-loading more friends
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+      const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100;
+      
+      if (isNearBottom && hasMoreFriends && !loadingFriends && !circlesProgress) {
+        console.log('Near bottom, loading more friends...');
+        loadMoreFriends(friendsCursor);
+      }
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll);
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, [hasMoreFriends, loadingFriends, circlesProgress, friendsCursor, loadMoreFriends]);
 
   useEffect(() => {
     if (isSDKLoaded && context?.user?.fid) {
       fetchFriends();
     }
-  }, [isSDKLoaded, context?.user?.fid]); // Remove fetchFriends dependency
+  }, [isSDKLoaded, context?.user?.fid, fetchFriends]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -370,7 +389,7 @@ export function FriendsList() {
                 {loadingFriends && (
                   <Badge variant="outline" className="text-xs">
                     <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                    Loading friends...
+                    {friendsCursor ? 'Loading more...' : 'Loading friends...'}
                   </Badge>
                 )}
               </div>
@@ -388,7 +407,10 @@ export function FriendsList() {
 
           {/* Content Area - Fixed minimum height */}
           <div className="min-h-[400px]">
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+            <div 
+              ref={scrollContainerRef}
+              className="space-y-2 max-h-[60vh] overflow-y-auto"
+            >
               {filteredFriends.map((friend) => (
                 <div key={friend.fid} className="rounded-lg border">
                   <div className="flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors">
@@ -491,23 +513,52 @@ export function FriendsList() {
 
               {/* Load More Button */}
               {hasMoreFriends && allFriendsArray.length > 0 && (
-                <div className="text-center py-4">
+                <div className="text-center py-6 border-t bg-gradient-to-b from-transparent to-muted/20">
                   <Button
                     onClick={() => loadMoreFriends(friendsCursor)}
                     disabled={loadingFriends}
-                    variant="outline"
+                    variant="default"
                     size="sm"
-                    className="text-xs"
+                    className="text-sm font-medium min-w-[160px] shadow-sm hover:shadow-md transition-all"
                   >
                     {loadingFriends ? (
                       <>
-                        <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                        Loading...
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Loading more...
                       </>
                     ) : (
-                      <>Load More Friends</>
+                      <>
+                        <ChevronDown className="h-4 w-4 mr-2" />
+                        Load More Friends
+                      </>
                     )}
                   </Button>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {loadingFriends ? 'Fetching more friends...' : 'Or scroll down to auto-load'}
+                  </p>
+                </div>
+              )}
+
+              {/* Auto-loading indicator */}
+              {hasMoreFriends && allFriendsArray.length > 0 && loadingFriends && !friendsCursor && (
+                <div className="text-center py-4">
+                  <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Loading more friends automatically...
+                  </div>
+                </div>
+              )}
+
+              {/* All friends loaded indicator */}
+              {!hasMoreFriends && allFriendsArray.length > 0 && !loadingFriends && (
+                <div className="text-center py-6 border-t bg-muted/20">
+                  <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                    <Users className="h-4 w-4" />
+                    All {allFriendsArray.length} friends loaded
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {showCirclesOnly ? `${filteredFriends.length} on Circles` : `${circlesCount} active on Circles`}
+                  </p>
                 </div>
               )}
             </div>

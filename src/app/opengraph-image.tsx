@@ -18,14 +18,10 @@ export default async function Image() {
         {/* Main content */}
         <div tw="flex flex-col items-center text-center z-10">
           {/* Title */}
-          <h1 tw="text-6xl font-bold text-white mb-4">Your Friends</h1>
-          <h2 tw="text-5xl font-bold text-white mb-8">on Circles</h2>
-
-          {/* Subtitle */}
-          <p tw="text-2xl text-white opacity-90 mb-12 max-w-4xl">
-            Discover which of your friends are on Circles protocol
-          </p>
-
+          <h1 tw="text-7xl font-bold text-white mb-4">
+            Find Your Farcaster Friends
+          </h1>
+          <h2 tw="text-6xl font-bold text-white mb-8">on Circles</h2>
           {/* Feature highlights */}
           <div tw="flex items-center justify-center space-x-8">
             <div tw="flex items-center space-x-3">
@@ -39,7 +35,7 @@ export default async function Image() {
 
             <div tw="flex items-center space-x-3">
               <div tw="w-8 h-8 bg-green-400 rounded-full flex items-center justify-center">
-                <span tw="text-2xl">🔗</span>
+                <span tw="text-2xl">🟠</span>
               </div>
               <span tw="text-xl text-white">Circles Status</span>
             </div>
@@ -50,7 +46,7 @@ export default async function Image() {
               <div tw="w-8 h-8 bg-pink-400 rounded-full flex items-center justify-center">
                 <span tw="text-2xl">❤️</span>
               </div>
-              <span tw="text-xl text-white">Trust Actions</span>
+              <span tw="text-xl text-white">Trust</span>
             </div>
           </div>
         </div>
