@@ -66,7 +66,92 @@ export function FriendsList() {
   const [friendsCursor, setFriendsCursor] = useState<string | null>(null);
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Progressive Circles status checking
+  const startCirclesProcessing = useCallback(
+    async (newFriends: FarcasterUser[]) => {
+      // Prevent concurrent processing
+      if (isProcessing) {
+        console.log("Circles processing already running, skipping");
+        return;
+      }
+
+      console.log(
+        "Starting Circles processing for",
+        newFriends.length,
+        "new friends",
+      );
+
+      const controller = new AbortController();
+      setAbortController(controller);
+      setIsProcessing(true);
+
+      // Get current user's verified addresses for trust checking
+      const currentUserAddresses: string[] = [];
+
+      try {
+        let finalCirclesCount = 0;
+        
+        for await (const update of streamCirclesStatus(
+          newFriends,
+          currentUserAddresses,
+        )) {
+          if (controller.signal.aborted) {
+            console.log("Circles processing aborted");
+            break;
+          }
+
+          // Update progress
+          setCirclesProgress({
+            completed: update.progress.completed,
+            total: update.progress.total,
+            percentage: Math.round(
+              (update.progress.completed / update.progress.total) * 100,
+            ),
+          });
+
+          // Update friend's circles data and track circles count
+          setAllFriends((prev) => {
+            const newMap = new Map(prev);
+            const existingFriend = newMap.get(update.fid);
+            if (existingFriend) {
+              newMap.set(update.fid, {
+                ...existingFriend,
+                circlesData: update.circlesData,
+              });
+            }
+            
+            // Calculate current circles count from updated map
+            finalCirclesCount = Array.from(newMap.values()).filter(
+              (f) => f.circlesData?.isActiveV2,
+            ).length;
+            
+            return newMap;
+          });
+        }
+
+        // Processing complete
+        setCirclesProgress(null);
+        setAbortController(null);
+        setIsProcessing(false);
+
+        if (finalCirclesCount > 0) {
+          toast.success(`Found ${finalCirclesCount} friends on Circles!`);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          console.error("Error checking Circles status:", error);
+          toast.error("Failed to check Circles status");
+        }
+        setCirclesProgress(null);
+        setAbortController(null);
+        setIsProcessing(false);
+      }
+    },
+    [isProcessing],
+  );
 
   // Progressive friend loading with pagination
   const loadMoreFriends = useCallback(
@@ -131,8 +216,8 @@ export function FriendsList() {
           toast.success(`Found ${data.friends.length} people you follow!`);
         }
 
-        // Start Circles checking for new friends
-        if (friendsToProcess.length > 0) {
+        // Start Circles checking for new friends (only if not already processing)
+        if (friendsToProcess.length > 0 && !isProcessing) {
           startCirclesProcessing(friendsToProcess);
         }
       } catch (error) {
@@ -160,100 +245,40 @@ export function FriendsList() {
     setCirclesProgress(null);
     setFriendsCursor(null);
     setHasMoreFriends(true);
+    setIsProcessing(false);
 
     // Load first page
     await loadMoreFriends(null);
-  }, [loadMoreFriends, abortController]);
-
-  // Progressive Circles status checking
-  const startCirclesProcessing = useCallback(
-    async (newFriends: FarcasterUser[]) => {
-      console.log(
-        "Starting Circles processing for",
-        newFriends.length,
-        "new friends",
-      );
-
-      const controller = new AbortController();
-      setAbortController(controller);
-
-      // Get current user's verified addresses for trust checking
-      const currentUserAddresses: string[] = [];
-
-      try {
-        for await (const update of streamCirclesStatus(
-          newFriends,
-          currentUserAddresses,
-        )) {
-          if (controller.signal.aborted) {
-            console.log("Circles processing aborted");
-            break;
-          }
-
-          // Update progress
-          setCirclesProgress({
-            completed: update.progress.completed,
-            total: update.progress.total,
-            percentage: Math.round(
-              (update.progress.completed / update.progress.total) * 100,
-            ),
-          });
-
-          // Update friend's circles data
-          setAllFriends((prev) => {
-            const newMap = new Map(prev);
-            const existingFriend = newMap.get(update.fid);
-            if (existingFriend) {
-              newMap.set(update.fid, {
-                ...existingFriend,
-                circlesData: update.circlesData,
-              });
-            }
-            return newMap;
-          });
-        }
-
-        // Processing complete
-        setCirclesProgress(null);
-        setAbortController(null);
-
-        const circlesCount = Array.from(allFriends.values()).filter(
-          (f) => f.circlesData?.isActiveV2,
-        ).length;
-
-        if (circlesCount > 0) {
-          toast.success(`Found ${circlesCount} friends on Circles!`);
-        }
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          console.error("Error checking Circles status:", error);
-          toast.error("Failed to check Circles status");
-        }
-        setCirclesProgress(null);
-        setAbortController(null);
-      }
-    },
-    [allFriends],
-  );
+  }, [loadMoreFriends]);
 
   // Scroll detection for auto-loading more friends
+  const handleScrollRef = useRef<() => void>();
+  
+  // Update the scroll handler reference when dependencies change
+  handleScrollRef.current = () => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+    const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100;
+    
+    if (isNearBottom && hasMoreFriends && !loadingFriends && !circlesProgress) {
+      console.log('Near bottom, loading more friends...');
+      loadMoreFriends(friendsCursor);
+    }
+  };
+
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
     if (!scrollContainer) return;
 
     const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
-      const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100;
-      
-      if (isNearBottom && hasMoreFriends && !loadingFriends && !circlesProgress) {
-        console.log('Near bottom, loading more friends...');
-        loadMoreFriends(friendsCursor);
-      }
+      handleScrollRef.current?.();
     };
 
     scrollContainer.addEventListener('scroll', handleScroll);
     return () => scrollContainer.removeEventListener('scroll', handleScroll);
-  }, [hasMoreFriends, loadingFriends, circlesProgress, friendsCursor, loadMoreFriends]);
+  }, []); // Empty dependency array - listener only added once
 
   useEffect(() => {
     if (isSDKLoaded && context?.user?.fid) {
