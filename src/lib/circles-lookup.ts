@@ -1,7 +1,7 @@
 // Note: This implementation uses direct HTTP API calls to Circles RPC endpoints
 // and does NOT require the Circles SDK or window.ethereum provider
 
-import { unstable_cache } from 'next/cache';
+// Removed unstable_cache import due to production issues
 
 interface CirclesProfile {
   name: string;
@@ -311,32 +311,10 @@ async function getCurrentUserTrustList(currentUserAddress: string): Promise<Set<
   }
 }
 
-// Use cache only in production builds
-const getCurrentUserTrusts = process.env.NODE_ENV === 'production'
-  ? unstable_cache(
-      getCurrentUserTrustList,
-      ['user-trust-list'],
-      { revalidate: 3600, tags: ['circles-trust'] } // 1 hour cache (trust changes more frequently)
-    )
-  : getCurrentUserTrustList;
-
-// Use cache only in production builds
-const checkActiveToken = process.env.NODE_ENV === 'production'
-  ? unstable_cache(
-      checkActiveCirclesToken,
-      ['active-token-lookup'],
-      { revalidate: 86400, tags: ['circles-token'] }
-    )
-  : checkActiveCirclesToken;
-
-// Use cache only in production builds
-const checkDirectCirclesProfile = process.env.NODE_ENV === 'production' 
-  ? unstable_cache(
-      directCirclesProfileLookup,
-      ['direct-circles-profile'],
-      { revalidate: 86400, tags: ['circles-profile'] }
-    )
-  : directCirclesProfileLookup;
+// Remove caching to avoid production issues
+const getCurrentUserTrusts = getCurrentUserTrustList;
+const checkActiveToken = checkActiveCirclesToken;
+const checkDirectCirclesProfile = directCirclesProfileLookup;
 
 // Signer to main account lookup function
 async function signerToMainAccountLookup(signerAddress: string) {
@@ -424,14 +402,8 @@ async function signerToMainAccountLookup(signerAddress: string) {
   return { exists: false };
 }
 
-// Use cache only in production builds
-const checkSignerToMainAccount = process.env.NODE_ENV === 'production'
-  ? unstable_cache(
-      signerToMainAccountLookup,
-      ['signer-circles-lookup'],
-      { revalidate: 86400, tags: ['circles-signer'] }
-    )
-  : signerToMainAccountLookup;
+// Remove caching to avoid production issues
+const checkSignerToMainAccount = signerToMainAccountLookup;
 
 // Batch processing function to avoid overwhelming the API
 export async function batchCheckCirclesStatus(
