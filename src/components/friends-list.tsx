@@ -150,12 +150,16 @@ export function FriendsList() {
         setIsProcessing(false);
       }
     },
-    [isProcessing],
+    [],
   );
 
   // Progressive friend loading with pagination
   const loadMoreFriends = useCallback(
     async (cursor: string | null = null) => {
+      if (loadingFriends) {
+        return; // Prevent concurrent calls
+      }
+      
       if (!context?.user?.fid) {
         toast.error("User not authenticated");
         return;
@@ -237,6 +241,7 @@ export function FriendsList() {
     // Cancel any ongoing circles processing
     if (abortController) {
       abortController.abort();
+      setIsProcessing(false); // Reset immediately after abort
     }
 
     // Reset state
@@ -262,7 +267,7 @@ export function FriendsList() {
     const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
     const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100;
     
-    if (isNearBottom && hasMoreFriends && !loadingFriends && !circlesProgress) {
+    if (isNearBottom && hasMoreFriends && !loadingFriends && !circlesProgress && !isProcessing) {
       console.log('Near bottom, loading more friends...');
       loadMoreFriends(friendsCursor);
     }
