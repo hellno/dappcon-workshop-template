@@ -61,7 +61,8 @@ export function FriendsList() {
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [circlesProgress, setCirclesProgress] =
     useState<CirclesProgress | null>(null);
-  const [showCirclesOnly, setShowCirclesOnly] = useState(true);
+  const [currentBatch, setCurrentBatch] = useState(0);
+  const [maxBatches] = useState(5); // Load 5 batches of 100 = 500 friends
   const [hasMoreFriends, setHasMoreFriends] = useState(true);
   const [friendsCursor, setFriendsCursor] = useState<string | null>(null);
   const [abortController, setAbortController] =
@@ -154,22 +155,18 @@ export function FriendsList() {
     [],
   );
 
-  // Progressive friend loading with pagination
-  const loadMoreFriends = useCallback(
-    async (cursor: string | null = null) => {
-      if (loadingFriends) {
-        return; // Prevent concurrent calls
-      }
-      
+  // Aggressive batch loading - load multiple batches automatically
+  const loadFriendsBatch = useCallback(
+    async (cursor: string | null = null, batchNumber: number = 1) => {
       if (!context?.user?.fid) {
         toast.error("User not authenticated");
-        return;
+        return false;
       }
 
-      setLoadingFriends(true);
       try {
         const params = new URLSearchParams({
           fid: context.user.fid.toString(),
+          limit: "100", // Always load 100 per batch
         });
         if (cursor) params.append("cursor", cursor);
 
@@ -207,34 +204,34 @@ export function FriendsList() {
           return newMap;
         });
 
-        // Update pagination state
-        setFriendsCursor(data.pagination?.nextCursor || null);
-        setHasMoreFriends(data.pagination?.hasMore || false);
-
         // Update stats based on actual map size (prevents duplicates)
         setFriendsStats({
           total: newSize,
         });
 
-        // Only show toast for initial load, not pagination
-        if (!cursor && newSize === data.friends.length) {
-          toast.success(`Found ${data.friends.length} people you follow!`);
-        }
+        // Update batch counter
+        setCurrentBatch(batchNumber);
 
         // Start Circles checking for new friends (only if not already processing)
         if (friendsToProcess.length > 0 && !isProcessing) {
           startCirclesProcessing(friendsToProcess);
         }
+
+        // Return whether there are more friends to load
+        return {
+          hasMore: !!data.pagination?.hasMore,
+          nextCursor: data.pagination?.nextCursor || null,
+          loadedCount: newSize
+        };
       } catch (error) {
-        console.error("Error fetching friends:", error);
+        console.error("Error fetching friends batch:", error);
         const errorMessage =
           error instanceof Error ? error.message : "Failed to load friends";
         toast.error(errorMessage);
-      } finally {
-        setLoadingFriends(false);
+        return false;
       }
     },
-    [context?.user?.fid, startCirclesProcessing],
+    [context?.user?.fid, startCirclesProcessing, isProcessing],
   );
 
   // Fetch user stats to get total following count
@@ -253,76 +250,73 @@ export function FriendsList() {
     }
   }, [context?.user?.fid]);
 
-  // Start fresh friend loading
-  const fetchFriends = useCallback(async () => {
+  // Aggressive auto-loading of 500 friends in batches
+  const autoLoadAllFriends = useCallback(async () => {
     // Cancel any ongoing circles processing
     if (abortController) {
       abortController.abort();
-      setIsProcessing(false); // Reset immediately after abort
+      setIsProcessing(false);
     }
 
     // Reset state
     setAllFriends(new Map());
     setFriendsStats({ total: 0 });
     setCirclesProgress(null);
-    setFriendsCursor(null);
-    setHasMoreFriends(true);
+    setCurrentBatch(0);
     setIsProcessing(false);
+    setLoadingFriends(true);
 
     // Fetch total following count if we don't have it
     if (totalFollowing === null) {
       fetchUserStats();
     }
 
-    // Load first page
-    await loadMoreFriends(null);
-  }, [loadMoreFriends, totalFollowing, fetchUserStats]);
-
-  // Scroll detection for auto-loading more friends with debouncing
-  const handleScrollRef = useRef<() => void>();
-  const scrollTimeoutRef = useRef<NodeJS.Timeout>();
-  
-  // Update the scroll handler reference when dependencies change
-  handleScrollRef.current = () => {
-    const scrollContainer = scrollContainerRef.current;
-    if (!scrollContainer) return;
-    
-    const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
-    // Use smaller threshold for mobile and exact bottom detection
-    const threshold = 50;
-    const isNearBottom = scrollTop + clientHeight >= scrollHeight - threshold;
-    const isAtBottom = Math.abs(scrollHeight - scrollTop - clientHeight) < 1;
-    
-    if ((isNearBottom || isAtBottom) && hasMoreFriends && !loadingFriends && !circlesProgress && !isProcessing) {
-      // Debounce scroll loading to prevent rapid API calls
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
+    try {
+      let cursor: string | null = null;
+      let batchNum = 1;
+      
+      // Load up to 5 batches (500 friends) or until no more available
+      while (batchNum <= maxBatches) {
+        console.log(`Loading batch ${batchNum}/${maxBatches}...`);
+        
+        const result = await loadFriendsBatch(cursor, batchNum);
+        
+        if (!result) {
+          // Error occurred, stop loading
+          break;
+        }
+        
+        if (!result.hasMore) {
+          // No more friends available
+          console.log(`Loaded all available friends (${result.loadedCount} total)`);
+          break;
+        }
+        
+        cursor = result.nextCursor;
+        batchNum++;
+        
+        // Small delay between batches to prevent rate limiting
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
       
-      scrollTimeoutRef.current = setTimeout(() => {
-        console.log('Near bottom, loading more friends...');
-        loadMoreFriends(friendsCursor);
-      }, 300); // 300ms debounce
+      if (batchNum > maxBatches) {
+        console.log(`Loaded maximum ${maxBatches} batches`);
+      }
+      
+    } catch (error) {
+      console.error('Error in auto-loading:', error);
+    } finally {
+      setLoadingFriends(false);
     }
-  };
+  }, [loadFriendsBatch, totalFollowing, fetchUserStats, maxBatches, abortController, isProcessing]);
 
-  useEffect(() => {
-    const scrollContainer = scrollContainerRef.current;
-    if (!scrollContainer) return;
-
-    const handleScroll = () => {
-      handleScrollRef.current?.();
-    };
-
-    scrollContainer.addEventListener('scroll', handleScroll);
-    return () => scrollContainer.removeEventListener('scroll', handleScroll);
-  }, []); // Empty dependency array - listener only added once
+  // Remove scroll detection since we auto-load all batches
 
   useEffect(() => {
     if (isSDKLoaded && context?.user?.fid) {
-      fetchFriends();
+      autoLoadAllFriends();
     }
-  }, [isSDKLoaded, context?.user?.fid, fetchFriends]);
+  }, [isSDKLoaded, context?.user?.fid, autoLoadAllFriends]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -344,15 +338,12 @@ export function FriendsList() {
     [sdk.actions],
   );
 
-  // Convert Map to Array and apply filtering
+  // Convert Map to Array and filter to only show Circles friends
   const allFriendsArray = Array.from(allFriends.values());
-  const filteredFriends = allFriendsArray.filter((friend) =>
-    showCirclesOnly ? friend.circlesData?.isActiveV2 : true,
-  );
+  const circlesFriends = allFriendsArray.filter((friend) => friend.circlesData?.isActiveV2);
 
-  const circlesCount = allFriendsArray.filter(
-    (f) => f.circlesData?.isActiveV2,
-  ).length;
+  // Count is now just the filtered array length
+  const circlesCount = circlesFriends.length;
 
   if (!isSDKLoaded) {
     return (
@@ -416,15 +407,6 @@ export function FriendsList() {
             Find which friends are on Circles protocol
           </CardDescription>
 
-          <div className="flex items-center justify-between pt-2">
-            <span className="text-sm font-medium">
-              Show Circles friends only
-            </span>
-            <Switch
-              checked={showCirclesOnly}
-              onCheckedChange={setShowCirclesOnly}
-            />
-          </div>
         </CardHeader>
         <CardContent className="p-4">
           {/* Status Bar - Always visible for consistent layout */}
@@ -432,21 +414,21 @@ export function FriendsList() {
             {allFriendsArray.length > 0 ? (
               <div className="flex gap-2 flex-wrap">
                 <Badge variant="default" className="text-xs">
-                  {showCirclesOnly
-                    ? filteredFriends.length
-                    : friendsStats.total}{" "}
-                  {showCirclesOnly ? "on Circles" : "friends"}
-                  {!showCirclesOnly && totalFollowing && (
+                  {circlesFriends.length} friends on Circles
+                </Badge>
+                <Badge variant="secondary" className="text-xs">
+                  Loaded {friendsStats.total}
+                  {totalFollowing && (
+                    <span className="ml-1">
+                      /{Math.min(totalFollowing, 500)}
+                    </span>
+                  )}
+                  {currentBatch > 0 && (
                     <span className="ml-1 opacity-75">
-                      ({Math.round((friendsStats.total / totalFollowing) * 100)}%)
+                      (batch {currentBatch}/{maxBatches})
                     </span>
                   )}
                 </Badge>
-                {!showCirclesOnly && (
-                  <Badge variant="secondary" className="text-xs">
-                    {circlesCount} active on Circles
-                  </Badge>
-                )}
                 {circlesProgress && (
                   <Badge variant="outline" className="text-xs">
                     <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
@@ -457,33 +439,18 @@ export function FriendsList() {
                 {loadingFriends && (
                   <Badge variant="outline" className="text-xs">
                     <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                    {friendsCursor ? 'Loading more...' : 'Loading friends...'}
-                    {totalFollowing && friendsStats.total > 0 && (
-                      <span className="ml-1">
-                        ({Math.round((friendsStats.total / totalFollowing) * 100)}%)
-                      </span>
-                    )}
+                    Loading batch {currentBatch}/{maxBatches}...
                   </Badge>
                 )}
               </div>
             ) : loadingFriends ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <RefreshCw className="h-4 w-4 animate-spin" />
-                Loading your friends...
-                {totalFollowing && (
-                  <span className="ml-1">
-                    (0/{totalFollowing})
-                  </span>
-                )}
+                Auto-loading friends (batch {currentBatch}/{maxBatches})...
               </div>
             ) : (
               <div className="text-sm text-muted-foreground">
-                Ready to load your friends
-                {totalFollowing && (
-                  <span className="ml-1">
-                    ({totalFollowing} total)
-                  </span>
-                )}
+                Searching for friends on Circles...
               </div>
             )}
           </div>
@@ -494,7 +461,7 @@ export function FriendsList() {
               ref={scrollContainerRef}
               className="space-y-2 max-h-[70vh] overflow-y-auto"
             >
-              {filteredFriends.map((friend) => (
+              {circlesFriends.map((friend) => (
                 <div key={friend.fid} className="rounded-lg border">
                   <div className="flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors">
                     <Avatar className="h-10 w-10">
@@ -562,21 +529,17 @@ export function FriendsList() {
                 </div>
               ))}
 
-              {/* Empty State - Filtered Results */}
-              {filteredFriends.length === 0 && allFriendsArray.length > 0 && (
+              {/* Empty State - No Circles Friends Yet */}
+              {circlesFriends.length === 0 && allFriendsArray.length > 0 && (
                 <div className="flex flex-col items-center justify-center py-12">
                   <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                   <p className="text-muted-foreground text-center">
-                    {showCirclesOnly
-                      ? circlesProgress
-                        ? `Found ${allFriendsArray.length} friends, still checking for Circles status...`
-                        : `No Circles friends found in ${allFriendsArray.length} friends`
-                      : "No friends match current filters"}
+                    {circlesProgress
+                      ? `Checked ${allFriendsArray.length} friends, still searching for Circles accounts...`
+                      : `No Circles friends found yet in ${allFriendsArray.length} friends`}
                   </p>
                   <p className="text-xs text-muted-foreground mt-2 text-center">
-                    {showCirclesOnly && !circlesProgress
-                      ? "Try toggling to show all friends"
-                      : ""}
+                    {loadingFriends ? "Loading more friends..." : "Circles accounts are rare, but we'll keep searching!"}
                   </p>
                 </div>
               )}
@@ -586,88 +549,57 @@ export function FriendsList() {
                 <div className="flex flex-col items-center justify-center py-12">
                   <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                   <p className="text-muted-foreground text-center">
-                    Ready to discover your friends on Circles
+                    Auto-loading will start automatically
                   </p>
                   <p className="text-xs text-muted-foreground mt-2 text-center">
-                    Click "Refresh Friends" to get started
+                    We'll search through your friends to find Circles accounts
                   </p>
                 </div>
               )}
 
-              {/* Load More Button */}
-              {hasMoreFriends && allFriendsArray.length > 0 && (
+              {/* Auto-loading Progress */}
+              {loadingFriends && allFriendsArray.length > 0 && (
                 <div className="text-center py-6 border-t bg-gradient-to-b from-transparent to-muted/20">
-                  <Button
-                    onClick={() => loadMoreFriends(friendsCursor)}
-                    disabled={loadingFriends}
-                    variant="default"
-                    size="sm"
-                    className="text-sm font-medium min-w-[160px] shadow-sm hover:shadow-md transition-all"
-                  >
-                    {loadingFriends ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        Loading more...
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown className="h-4 w-4 mr-2" />
-                        Load More Friends
-                      </>
-                    )}
-                  </Button>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {loadingFriends ? 'Fetching more friends...' : 'Or scroll down to auto-load'}
-                  </p>
-                </div>
-              )}
-
-              {/* Auto-loading indicator */}
-              {hasMoreFriends && allFriendsArray.length > 0 && loadingFriends && !friendsCursor && (
-                <div className="text-center py-4">
                   <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                     <RefreshCw className="h-4 w-4 animate-spin" />
-                    Loading more friends automatically...
+                    Auto-loading batch {currentBatch}/{maxBatches}...
                   </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Searching for rare Circles accounts in your network
+                  </p>
                 </div>
               )}
 
-              {/* All friends loaded indicator */}
-              {!hasMoreFriends && allFriendsArray.length > 0 && !loadingFriends && (
+
+              {/* Loading Complete */}
+              {!loadingFriends && allFriendsArray.length > 0 && (
                 <div className="text-center py-6 border-t bg-muted/20">
                   <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                     <Users className="h-4 w-4" />
-                    All {allFriendsArray.length} friends loaded
+                    Searched {allFriendsArray.length} friends
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {showCirclesOnly ? `${filteredFriends.length} on Circles` : `${circlesCount} active on Circles`}
+                    Found {circlesCount} friends on Circles
                   </p>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="mt-4 pt-4 border-t">
-            <Button
-              onClick={fetchFriends}
-              disabled={loadingFriends || !!circlesProgress}
-              className="w-full text-sm"
-              size="sm"
-              variant="outline"
-            >
-              {loadingFriends || circlesProgress ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  {circlesProgress ? "Processing..." : "Loading..."}
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Refresh Friends
-                </>
-              )}
-            </Button>
-          </div>
+          {/* Auto-loading eliminates need for manual refresh */}
+          {!loadingFriends && !circlesProgress && (
+            <div className="mt-4 pt-4 border-t">
+              <Button
+                onClick={autoLoadAllFriends}
+                className="w-full text-sm"
+                size="sm"
+                variant="outline"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Search Again
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
