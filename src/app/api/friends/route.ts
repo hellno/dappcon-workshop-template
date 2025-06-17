@@ -11,9 +11,14 @@ export async function GET(request: NextRequest) {
     console.log("Friends API called");
 
     const searchParams = request.nextUrl.searchParams;
+
     const fidParam = searchParams.get("fid");
+    const cursorParam = searchParams.get("cursor");
+    const limitParam = searchParams.get("limit");
 
     console.log("FID parameter:", fidParam);
+    console.log("Cursor parameter:", cursorParam);
+    console.log("Limit parameter:", limitParam);
 
     if (!fidParam) {
       console.log("Missing FID parameter");
@@ -24,7 +29,8 @@ export async function GET(request: NextRequest) {
     }
 
     const fid = Number(fidParam);
-    console.log("Parsed FID:", fid);
+    const limit = limitParam ? Math.min(Number(limitParam), 150) : 100; // Cap at 150 per request
+    console.log("Parsed FID:", fid, "Limit:", limit);
 
     // Check if Neynar API key is configured
     if (!process.env.NEYNAR_API_KEY) {
@@ -37,16 +43,21 @@ export async function GET(request: NextRequest) {
 
     console.log("Fetching following for FID:", fid);
 
-    // Get user's following list (people they follow)
-    // Note: Neynar API has a maximum limit of 100
-    const following = await neynarClient.fetchUserFollowing({
+    // Get user's following list with pagination support
+    const followingParams: any = {
       fid,
+      limit,
       viewerFid: fid,
-      limit: 25,
       sortType: "algorithmic",
-    });
+    };
+    if (cursorParam) {
+      followingParams.cursor = cursorParam;
+    }
+
+    const following = await neynarClient.fetchUserFollowing(followingParams);
 
     console.log("Following data received, user count:", following.users.length);
+    console.log("Has next page:", !!following.next?.cursor);
 
     // Extract the user data from the following response
     const followingUsers = following.users.map((follower) => follower.user);
@@ -55,6 +66,10 @@ export async function GET(request: NextRequest) {
       friends: followingUsers,
       stats: {
         following: followingUsers.length,
+      },
+      pagination: {
+        nextCursor: following.next?.cursor || null,
+        hasMore: !!following.next?.cursor,
       },
     });
   } catch (error) {

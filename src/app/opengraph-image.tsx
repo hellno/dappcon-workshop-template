@@ -13,7 +13,7 @@ export default async function Image() {
     (
       <div tw="h-full w-full flex flex-col justify-center items-center relative bg-purple-600">
         {/* Background pattern */}
-        <div tw="absolute inset-0 bg-black bg-opacity-10"></div>
+        <div tw="absolute inset-0 bg-black bg-opacity-200"></div>
 
         {/* Main content */}
         <div tw="flex flex-col items-center text-center z-10">

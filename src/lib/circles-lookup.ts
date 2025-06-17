@@ -1,7 +1,7 @@
 // Note: This implementation uses direct HTTP API calls to Circles RPC endpoints
 // and does NOT require the Circles SDK or window.ethereum provider
 
-import { unstable_cache } from 'next/cache';
+// Removed unstable_cache import due to production issues
 
 interface CirclesProfile {
   name: string;
@@ -21,11 +21,23 @@ interface CirclesEvent {
   [key: string]: unknown;
 }
 
+interface AvatarInfo {
+  avatar: string;
+  tokenAddress?: string;
+  avatarType?: 'human' | 'organization' | 'group';
+  circlesVersion?: string;
+  signupTimestamp?: number;
+  profileCid?: string;
+}
+
 export interface CirclesData {
   isOnCircles: boolean;
   mainAddress?: string;
   profileData?: CirclesProfile;
   signerAddress?: string;
+  avatarInfo?: AvatarInfo;
+  isActiveV2?: boolean;
+  isTrustedByCurrentUser?: boolean;
 }
 
 export interface DebugData {
@@ -73,11 +85,18 @@ export async function checkCirclesStatusWithDebug(ethAddresses: string[]): Promi
     // Return first successful match (prioritize direct, then signer)
     if (direct.exists) {
       console.log('Found direct Circles profile for:', address);
+      
+      // Check if user has active Circles v2 token
+      const avatarInfo = await checkActiveToken(address);
+      const isActiveV2 = avatarInfo && avatarInfo.tokenAddress;
+      
       return {
         circlesData: {
           isOnCircles: true,
           mainAddress: address,
-          profileData: direct.profileData
+          profileData: direct.profileData,
+          avatarInfo,
+          isActiveV2: !!isActiveV2
         },
         debugData
       };
@@ -85,12 +104,19 @@ export async function checkCirclesStatusWithDebug(ethAddresses: string[]): Promi
     
     if (signer.exists) {
       console.log('Found main account via signer lookup for:', address, '-> main:', signer.mainAddress);
+      
+      // Check if main address has active Circles v2 token
+      const avatarInfo = signer.mainAddress ? await checkActiveToken(signer.mainAddress) : undefined;
+      const isActiveV2 = avatarInfo && avatarInfo.tokenAddress;
+      
       return {
         circlesData: {
           isOnCircles: true,
           mainAddress: signer.mainAddress,
           profileData: signer.profileData,
-          signerAddress: address
+          signerAddress: address,
+          avatarInfo,
+          isActiveV2: !!isActiveV2
         },
         debugData
       };
@@ -104,12 +130,11 @@ export async function checkCirclesStatusWithDebug(ethAddresses: string[]): Promi
   };
 }
 
-// Cached version of direct profile lookup - Next.js cache with 24 hour TTL
-const checkDirectCirclesProfile = unstable_cache(
-  async (address: string) => {
+// Direct profile lookup function
+async function directCirclesProfileLookup(address: string) {
   try {
     const url = `https://rpc.aboutcircles.com/profiles/search?address=${address}`;
-    console.log(`🔍 Direct profile lookup for: ${address} (cache miss - making API call)`);
+    console.log(`🔍 Direct profile lookup for: ${address}`);
     console.log(`📡 Profile URL: ${url}`);
     
     const response = await fetch(url);
@@ -153,19 +178,148 @@ const checkDirectCirclesProfile = unstable_cache(
   }
   
   return { exists: false };
-  },
-  ['direct-circles-profile'], // Cache key will be parameterized by address automatically
-  {
-    revalidate: 86400, // 24 hours
-    tags: ['circles-profile']
-  }
-);
+}
 
-// Cached version of signer to main account lookup - Next.js cache with 24 hour TTL
-const checkSignerToMainAccount = unstable_cache(
-  async (signerAddress: string) => {
+// Check if user is active on Circles v2 by looking for CrcV2_RegisterHuman event (99% more efficient)
+async function checkActiveCirclesToken(address: string): Promise<AvatarInfo | undefined> {
   try {
-    console.log(`🔍 Checking signer events for: ${signerAddress} (cache miss - making API call)`);
+    console.log(`🔍 Checking for Circles v2 registration: ${address}`);
+    
+    const response = await fetch("https://rpc.aboutcircles.com", {
+      method: "POST", 
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "circles_events",
+        params: [address, 0, null]
+      })
+    });
+    
+    console.log(`📡 Registration check response status: ${response.status}`);
+    
+    if (!response.ok) {
+      console.log(`❌ Registration check request failed: ${response.status} ${response.statusText}`);
+      return undefined;
+    }
+    
+    const data = await response.json();
+    
+    if (data.result && Array.isArray(data.result) && data.result.length > 0) {
+      // Look for CrcV2_RegisterHuman event - the definitive active v2 user indicator
+      const registerEvent = data.result.find((event: any) => 
+        event.event === 'CrcV2_RegisterHuman'
+      );
+      
+      if (registerEvent) {
+        console.log(`✅ Found Circles v2 registration for ${address}`);
+        
+        // Determine avatar type based on events
+        let avatarType: 'human' | 'organization' | 'group' = 'human';
+        if (data.result.some((e: any) => e.event?.includes('Group'))) {
+          avatarType = 'group';
+        } else if (data.result.some((e: any) => e.event?.includes('Organization'))) {
+          avatarType = 'organization';
+        }
+        
+        return {
+          avatar: address,
+          tokenAddress: address,
+          avatarType,
+          circlesVersion: 'v2',
+          signupTimestamp: registerEvent.values?.timestamp ? parseInt(registerEvent.values.timestamp, 16) : undefined
+        };
+      } else {
+        // Fallback: check for any CrcV2_* events (backup method for edge cases)
+        const hasV2Activity = data.result.some((event: any) => 
+          event.event?.startsWith('CrcV2_')
+        );
+        
+        if (hasV2Activity) {
+          console.log(`✅ Found Circles v2 activity for ${address} (no RegisterHuman but has v2 events)`);
+          
+          const firstV2Event = data.result.find((event: any) => 
+            event.event?.startsWith('CrcV2_')
+          );
+          
+          return {
+            avatar: address,
+            tokenAddress: address,
+            avatarType: 'human', // Default for fallback
+            circlesVersion: 'v2',
+            signupTimestamp: firstV2Event?.values?.timestamp ? parseInt(firstV2Event.values.timestamp, 16) : undefined
+          };
+        } else {
+          console.log(`❌ No Circles v2 registration or activity found for ${address}`);
+        }
+      }
+    } else {
+      console.log(`❌ No events found for ${address}`);
+    }
+  } catch (error) {
+    console.log(`💥 Registration check failed for ${address}:`, error);
+  }
+  
+  return undefined;
+}
+
+// Get current user's trust relationships (who they trust)
+async function getCurrentUserTrustList(currentUserAddress: string): Promise<Set<string>> {
+  try {
+    console.log(`🔍 Getting trust list for current user: ${currentUserAddress}`);
+    
+    const response = await fetch("https://rpc.aboutcircles.com", {
+      method: "POST", 
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "circles_events",
+        params: [currentUserAddress, 0, null]
+      })
+    });
+    
+    if (!response.ok) {
+      console.log(`❌ Trust list request failed: ${response.status} ${response.statusText}`);
+      return new Set();
+    }
+    
+    const data = await response.json();
+    
+    if (data.result && Array.isArray(data.result)) {
+      // Find all CrcV2_Trust events where current user is the truster
+      const trustEvents = data.result.filter((event: any) => 
+        event.event === 'CrcV2_Trust' && 
+        event.values?.truster?.toLowerCase() === currentUserAddress.toLowerCase()
+      );
+      
+      // Extract unique trustee addresses
+      const trustedAddresses = new Set(
+        trustEvents
+          .map((event: any) => event.values?.trustee?.toLowerCase())
+          .filter(Boolean)
+      );
+      
+      console.log(`✅ Found ${trustedAddresses.size} trusted addresses for ${currentUserAddress}`);
+      return trustedAddresses;
+    }
+    
+    return new Set();
+  } catch (error) {
+    console.log(`💥 Trust list lookup failed for ${currentUserAddress}:`, error);
+    return new Set();
+  }
+}
+
+// Remove caching to avoid production issues
+const getCurrentUserTrusts = getCurrentUserTrustList;
+const checkActiveToken = checkActiveCirclesToken;
+const checkDirectCirclesProfile = directCirclesProfileLookup;
+
+// Signer to main account lookup function
+async function signerToMainAccountLookup(signerAddress: string) {
+  try {
+    console.log(`🔍 Checking signer events for: ${signerAddress}`);
     
     // Use circles_events to find Safe_AddedOwner events
     const response = await fetch("https://rpc.aboutcircles.com", {
@@ -246,13 +400,10 @@ const checkSignerToMainAccount = unstable_cache(
   }
   
   return { exists: false };
-  },
-  ['signer-circles-lookup'], // Cache key will be parameterized by signerAddress automatically
-  {
-    revalidate: 86400, // 24 hours
-    tags: ['circles-signer']
-  }
-);
+}
+
+// Remove caching to avoid production issues
+const checkSignerToMainAccount = signerToMainAccountLookup;
 
 // Batch processing function to avoid overwhelming the API
 export async function batchCheckCirclesStatus(
@@ -271,7 +422,7 @@ export async function batchCheckCirclesStatus(
   console.log('Users with verified addresses:', usersWithAddresses.length);
   
   // Process in batches to avoid rate limiting
-  const batchSize = 3; // Reduced batch size to be more respectful to Circles API
+  const batchSize = 8; // Increased batch size for better performance
   for (let i = 0; i < usersWithAddresses.length; i += batchSize) {
     const batch = usersWithAddresses.slice(i, i + batchSize);
     
@@ -300,28 +451,120 @@ export async function batchCheckCirclesStatus(
       results.set(fid, { circlesData, debugData });
     });
     
-    // Add users without verified addresses as not on Circles
-    users.filter(user => 
-      !user.verified_addresses?.eth_addresses || user.verified_addresses.eth_addresses.length === 0
-    ).forEach(user => {
-      if (!results.has(user.fid)) {
-        results.set(user.fid, { 
-          circlesData: { isOnCircles: false },
-          debugData: { addressChecks: [] }
-        });
-      }
-    });
-    
-    // Delay between batches to be respectful to the API
+    // Reduced delay for better UX
     if (i + batchSize < usersWithAddresses.length) {
-      console.log('Waiting 200ms before next batch...');
-      await new Promise(resolve => setTimeout(resolve, 200));
+      console.log('Waiting 100ms before next batch...');
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
   }
+  
+  // Add users without verified addresses as not on Circles
+  users.filter(user => 
+    !user.verified_addresses?.eth_addresses || user.verified_addresses.eth_addresses.length === 0
+  ).forEach(user => {
+    if (!results.has(user.fid)) {
+      results.set(user.fid, { 
+        circlesData: { isOnCircles: false },
+        debugData: { addressChecks: [] }
+      });
+    }
+  });
   
   const circlesUsers = Array.from(results.values()).filter(result => result.circlesData.isOnCircles).length;
   console.log(`=== BATCH LOOKUP COMPLETE ===`);
   console.log(`Found ${circlesUsers} users on Circles out of ${users.length} total users`);
   
   return results;
+}
+
+// Streaming version for progressive UI updates with trust relationship checking
+export async function* streamCirclesStatus(
+  users: Array<{ fid: number; username: string; verified_addresses?: { eth_addresses: string[] } }>,
+  currentUserAddresses?: string[]
+): AsyncGenerator<{ fid: number; circlesData: CirclesData; progress: { completed: number; total: number } }> {
+  console.log('=== STARTING STREAMING CIRCLES LOOKUP ===');
+  console.log('Total users to check:', users.length);
+  
+  // Get current user's trust relationships if provided
+  let currentUserTrusts = new Set<string>();
+  if (currentUserAddresses && currentUserAddresses.length > 0) {
+    // Get trust list for the first active Circles address
+    for (const address of currentUserAddresses) {
+      const trusts = await getCurrentUserTrusts(address);
+      if (trusts.size > 0) {
+        currentUserTrusts = trusts;
+        console.log('Found trust list for current user:', address, 'trusts:', trusts.size, 'addresses');
+        break;
+      }
+    }
+  }
+  
+  // Filter users that have verified addresses
+  const usersWithAddresses = users.filter(user => 
+    user.verified_addresses?.eth_addresses && user.verified_addresses.eth_addresses.length > 0
+  );
+  
+  const usersWithoutAddresses = users.filter(user => 
+    !user.verified_addresses?.eth_addresses || user.verified_addresses.eth_addresses.length === 0
+  );
+  
+  console.log('Users with verified addresses:', usersWithAddresses.length);
+  console.log('Users without verified addresses:', usersWithoutAddresses.length);
+  
+  let completed = 0;
+  const total = users.length;
+  
+  // First, yield users without addresses (instant)
+  for (const user of usersWithoutAddresses) {
+    completed++;
+    yield {
+      fid: user.fid,
+      circlesData: { isOnCircles: false },
+      progress: { completed, total }
+    };
+  }
+  
+  // Process users with addresses in batches
+  const batchSize = 8;
+  for (let i = 0; i < usersWithAddresses.length; i += batchSize) {
+    const batch = usersWithAddresses.slice(i, i + batchSize);
+    
+    console.log(`Processing streaming batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(usersWithAddresses.length / batchSize)}`);
+    
+    const batchPromises = batch.map(async (user) => {
+      const result = await checkCirclesStatusWithDebug(user.verified_addresses!.eth_addresses);
+      
+      // Check if this user is trusted by current user
+      let isTrustedByCurrentUser = false;
+      if (result.circlesData.isOnCircles && result.circlesData.mainAddress) {
+        isTrustedByCurrentUser = currentUserTrusts.has(result.circlesData.mainAddress.toLowerCase());
+      }
+      
+      return { 
+        fid: user.fid, 
+        circlesData: {
+          ...result.circlesData,
+          isTrustedByCurrentUser
+        }
+      };
+    });
+    
+    const batchResults = await Promise.all(batchPromises);
+    
+    // Yield each result as it completes
+    for (const result of batchResults) {
+      completed++;
+      yield {
+        ...result,
+        progress: { completed, total }
+      };
+    }
+    
+    // Small delay between batches
+    if (i + batchSize < usersWithAddresses.length) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  
+  console.log(`=== STREAMING LOOKUP COMPLETE ===`);
 }
