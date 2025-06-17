@@ -28,6 +28,7 @@ interface AvatarInfo {
   circlesVersion?: string;
   signupTimestamp?: number;
   profileCid?: string;
+  mintableAmount?: bigint;
 }
 
 export interface CirclesData {
@@ -37,6 +38,7 @@ export interface CirclesData {
   signerAddress?: string;
   avatarInfo?: AvatarInfo;
   isActiveV2?: boolean;
+  isActivelyEarning?: boolean;
   isTrustedByCurrentUser?: boolean;
 }
 
@@ -89,6 +91,7 @@ export async function checkCirclesStatusWithDebug(ethAddresses: string[]): Promi
       // Check if user has active Circles v2 token
       const avatarInfo = await checkActiveToken(address);
       const isActiveV2 = avatarInfo && avatarInfo.tokenAddress;
+      const isActivelyEarning = avatarInfo && avatarInfo.mintableAmount && avatarInfo.mintableAmount > 0n;
       
       return {
         circlesData: {
@@ -96,7 +99,8 @@ export async function checkCirclesStatusWithDebug(ethAddresses: string[]): Promi
           mainAddress: address,
           profileData: direct.profileData,
           avatarInfo,
-          isActiveV2: !!isActiveV2
+          isActiveV2: !!isActiveV2,
+          isActivelyEarning: !!isActivelyEarning
         },
         debugData
       };
@@ -108,6 +112,7 @@ export async function checkCirclesStatusWithDebug(ethAddresses: string[]): Promi
       // Check if main address has active Circles v2 token
       const avatarInfo = signer.mainAddress ? await checkActiveToken(signer.mainAddress) : undefined;
       const isActiveV2 = avatarInfo && avatarInfo.tokenAddress;
+      const isActivelyEarning = avatarInfo && avatarInfo.mintableAmount && avatarInfo.mintableAmount > 0n;
       
       return {
         circlesData: {
@@ -116,7 +121,8 @@ export async function checkCirclesStatusWithDebug(ethAddresses: string[]): Promi
           profileData: signer.profileData,
           signerAddress: address,
           avatarInfo,
-          isActiveV2: !!isActiveV2
+          isActiveV2: !!isActiveV2,
+          isActivelyEarning: !!isActivelyEarning
         },
         debugData
       };
@@ -180,6 +186,45 @@ async function directCirclesProfileLookup(address: string) {
   return { exists: false };
 }
 
+// Check mintable amount for an address using Circles RPC API
+async function checkMintableAmount(address: string): Promise<bigint> {
+  try {
+    console.log(`🔍 Checking mintable amount for: ${address}`);
+    
+    const response = await fetch("https://rpc.aboutcircles.com", {
+      method: "POST", 
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "circles_getMintableAmount",
+        params: [address]
+      })
+    });
+    
+    console.log(`📡 Mintable amount response status: ${response.status}`);
+    
+    if (!response.ok) {
+      console.log(`❌ Mintable amount request failed: ${response.status} ${response.statusText}`);
+      return 0n;
+    }
+    
+    const data = await response.json();
+    
+    if (data.result) {
+      const mintableAmount = BigInt(data.result);
+      console.log(`✅ Found mintable amount for ${address}: ${mintableAmount.toString()}`);
+      return mintableAmount;
+    } else {
+      console.log(`❌ No mintable amount found for ${address}`);
+      return 0n;
+    }
+  } catch (error) {
+    console.log(`💥 Mintable amount check failed for ${address}:`, error);
+    return 0n;
+  }
+}
+
 // Check if user is active on Circles v2 by looking for CrcV2_RegisterHuman event (99% more efficient)
 async function checkActiveCirclesToken(address: string): Promise<AvatarInfo | undefined> {
   try {
@@ -214,6 +259,9 @@ async function checkActiveCirclesToken(address: string): Promise<AvatarInfo | un
       if (registerEvent) {
         console.log(`✅ Found Circles v2 registration for ${address}`);
         
+        // Check mintable amount for actively earning status
+        const mintableAmount = await checkMintableAmount(address);
+        
         // Determine avatar type based on events
         let avatarType: 'human' | 'organization' | 'group' = 'human';
         if (data.result.some((e: any) => e.event?.includes('Group'))) {
@@ -227,7 +275,8 @@ async function checkActiveCirclesToken(address: string): Promise<AvatarInfo | un
           tokenAddress: address,
           avatarType,
           circlesVersion: 'v2',
-          signupTimestamp: registerEvent.values?.timestamp ? parseInt(registerEvent.values.timestamp, 16) : undefined
+          signupTimestamp: registerEvent.values?.timestamp ? parseInt(registerEvent.values.timestamp, 16) : undefined,
+          mintableAmount
         };
       } else {
         // Fallback: check for any CrcV2_* events (backup method for edge cases)
@@ -238,6 +287,9 @@ async function checkActiveCirclesToken(address: string): Promise<AvatarInfo | un
         if (hasV2Activity) {
           console.log(`✅ Found Circles v2 activity for ${address} (no RegisterHuman but has v2 events)`);
           
+          // Check mintable amount for actively earning status
+          const mintableAmount = await checkMintableAmount(address);
+          
           const firstV2Event = data.result.find((event: any) => 
             event.event?.startsWith('CrcV2_')
           );
@@ -247,7 +299,8 @@ async function checkActiveCirclesToken(address: string): Promise<AvatarInfo | un
             tokenAddress: address,
             avatarType: 'human', // Default for fallback
             circlesVersion: 'v2',
-            signupTimestamp: firstV2Event?.values?.timestamp ? parseInt(firstV2Event.values.timestamp, 16) : undefined
+            signupTimestamp: firstV2Event?.values?.timestamp ? parseInt(firstV2Event.values.timestamp, 16) : undefined,
+            mintableAmount
           };
         } else {
           console.log(`❌ No Circles v2 registration or activity found for ${address}`);
@@ -437,7 +490,10 @@ export async function batchCheckCirclesStatus(
         console.log(`✅ Found Circles profile for @${user.username}:`, {
           mainAddress: result.circlesData.mainAddress,
           signerAddress: result.circlesData.signerAddress,
-          profileName: result.circlesData.profileData?.name
+          profileName: result.circlesData.profileData?.name,
+          isActiveV2: result.circlesData.isActiveV2,
+          isActivelyEarning: result.circlesData.isActivelyEarning,
+          mintableAmount: result.circlesData.avatarInfo?.mintableAmount?.toString()
         });
       } else {
         console.log(`❌ No Circles profile found for @${user.username}`);

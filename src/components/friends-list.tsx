@@ -95,6 +95,7 @@ export function FriendsList() {
 
       try {
         let finalCirclesCount = 0;
+        let finalEarningCount = 0;
         
         for await (const update of streamCirclesStatus(
           newFriends,
@@ -125,9 +126,12 @@ export function FriendsList() {
               });
             }
             
-            // Calculate current circles count from updated map
+            // Calculate current circles and earning counts from updated map
             finalCirclesCount = Array.from(newMap.values()).filter(
               (f) => f.circlesData?.isActiveV2,
+            ).length;
+            finalEarningCount = Array.from(newMap.values()).filter(
+              (f) => f.circlesData?.isActivelyEarning,
             ).length;
             
             return newMap;
@@ -140,7 +144,11 @@ export function FriendsList() {
         setIsProcessing(false);
 
         if (finalCirclesCount > 0) {
-          toast.success(`Found ${finalCirclesCount} friends on Circles!`);
+          if (finalEarningCount > 0) {
+            toast.success(`Found ${finalCirclesCount} friends on Circles (${finalEarningCount} actively earning)!`);
+          } else {
+            toast.success(`Found ${finalCirclesCount} friends on Circles!`);
+          }
         }
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -341,9 +349,11 @@ export function FriendsList() {
   // Convert Map to Array and filter to only show Circles friends
   const allFriendsArray = Array.from(allFriends.values());
   const circlesFriends = allFriendsArray.filter((friend) => friend.circlesData?.isActiveV2);
+  const earningFriends = allFriendsArray.filter((friend) => friend.circlesData?.isActivelyEarning);
 
   // Count is now just the filtered array length
   const circlesCount = circlesFriends.length;
+  const earningCount = earningFriends.length;
 
   if (!isSDKLoaded) {
     return (
@@ -416,6 +426,11 @@ export function FriendsList() {
                 <Badge variant="default" className="text-xs">
                   {circlesFriends.length} friends on Circles
                 </Badge>
+                {earningCount > 0 && (
+                  <Badge variant="default" className="text-xs bg-green-100 text-green-800 border-green-200">
+                    💰 {earningCount} actively earning
+                  </Badge>
+                )}
                 <Badge variant="secondary" className="text-xs">
                   Loaded {friendsStats.total}
                   {totalFollowing && (
@@ -479,10 +494,25 @@ export function FriendsList() {
                         <p className="font-medium text-sm truncate">
                           {friend.display_name}
                         </p>
+                        {/* Show earning status */}
+                        {friend.circlesData?.isActivelyEarning && (
+                          <Badge variant="default" className="text-xs bg-green-100 text-green-800 border-green-200">
+                            💰 Earning
+                          </Badge>
+                        )}
                       </div>
-                      <p className="text-xs text-muted-foreground truncate">
-                        @{friend.username}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs text-muted-foreground truncate">
+                          @{friend.username}
+                        </p>
+                        {/* Show mintable amount if available */}
+                        {friend.circlesData?.avatarInfo?.mintableAmount && 
+                         friend.circlesData.avatarInfo.mintableAmount > 0n && (
+                          <span className="text-xs text-green-600 font-medium">
+                            {(Number(friend.circlesData.avatarInfo.mintableAmount) / 1e18).toFixed(2)} CRC
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex gap-2 shrink-0">
