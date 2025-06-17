@@ -67,6 +67,7 @@ export function FriendsList() {
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [totalFollowing, setTotalFollowing] = useState<number | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Progressive Circles status checking
@@ -236,6 +237,22 @@ export function FriendsList() {
     [context?.user?.fid, startCirclesProcessing],
   );
 
+  // Fetch user stats to get total following count
+  const fetchUserStats = useCallback(async () => {
+    if (!context?.user?.fid) return;
+
+    try {
+      const response = await fetch(`/api/user-stats?fid=${context.user.fid}`);
+      if (response.ok) {
+        const stats = await response.json();
+        setTotalFollowing(stats.following_count);
+        console.log('Total following count:', stats.following_count);
+      }
+    } catch (error) {
+      console.error('Error fetching user stats:', error);
+    }
+  }, [context?.user?.fid]);
+
   // Start fresh friend loading
   const fetchFriends = useCallback(async () => {
     // Cancel any ongoing circles processing
@@ -252,12 +269,18 @@ export function FriendsList() {
     setHasMoreFriends(true);
     setIsProcessing(false);
 
+    // Fetch total following count if we don't have it
+    if (totalFollowing === null) {
+      fetchUserStats();
+    }
+
     // Load first page
     await loadMoreFriends(null);
-  }, [loadMoreFriends]);
+  }, [loadMoreFriends, totalFollowing, fetchUserStats]);
 
-  // Scroll detection for auto-loading more friends
+  // Scroll detection for auto-loading more friends with debouncing
   const handleScrollRef = useRef<() => void>();
+  const scrollTimeoutRef = useRef<NodeJS.Timeout>();
   
   // Update the scroll handler reference when dependencies change
   handleScrollRef.current = () => {
@@ -265,11 +288,21 @@ export function FriendsList() {
     if (!scrollContainer) return;
     
     const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
-    const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100;
+    // Use smaller threshold for mobile and exact bottom detection
+    const threshold = 50;
+    const isNearBottom = scrollTop + clientHeight >= scrollHeight - threshold;
+    const isAtBottom = Math.abs(scrollHeight - scrollTop - clientHeight) < 1;
     
-    if (isNearBottom && hasMoreFriends && !loadingFriends && !circlesProgress && !isProcessing) {
-      console.log('Near bottom, loading more friends...');
-      loadMoreFriends(friendsCursor);
+    if ((isNearBottom || isAtBottom) && hasMoreFriends && !loadingFriends && !circlesProgress && !isProcessing) {
+      // Debounce scroll loading to prevent rapid API calls
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      
+      scrollTimeoutRef.current = setTimeout(() => {
+        console.log('Near bottom, loading more friends...');
+        loadMoreFriends(friendsCursor);
+      }, 300); // 300ms debounce
     }
   };
 
@@ -403,6 +436,11 @@ export function FriendsList() {
                     ? filteredFriends.length
                     : friendsStats.total}{" "}
                   {showCirclesOnly ? "on Circles" : "friends"}
+                  {!showCirclesOnly && totalFollowing && (
+                    <span className="ml-1 opacity-75">
+                      ({Math.round((friendsStats.total / totalFollowing) * 100)}%)
+                    </span>
+                  )}
                 </Badge>
                 {!showCirclesOnly && (
                   <Badge variant="secondary" className="text-xs">
@@ -420,6 +458,11 @@ export function FriendsList() {
                   <Badge variant="outline" className="text-xs">
                     <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
                     {friendsCursor ? 'Loading more...' : 'Loading friends...'}
+                    {totalFollowing && friendsStats.total > 0 && (
+                      <span className="ml-1">
+                        ({Math.round((friendsStats.total / totalFollowing) * 100)}%)
+                      </span>
+                    )}
                   </Badge>
                 )}
               </div>
@@ -427,10 +470,20 @@ export function FriendsList() {
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <RefreshCw className="h-4 w-4 animate-spin" />
                 Loading your friends...
+                {totalFollowing && (
+                  <span className="ml-1">
+                    (0/{totalFollowing})
+                  </span>
+                )}
               </div>
             ) : (
               <div className="text-sm text-muted-foreground">
                 Ready to load your friends
+                {totalFollowing && (
+                  <span className="ml-1">
+                    ({totalFollowing} total)
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -439,7 +492,7 @@ export function FriendsList() {
           <div className="min-h-[400px]">
             <div 
               ref={scrollContainerRef}
-              className="space-y-2 max-h-[60vh] overflow-y-auto"
+              className="space-y-2 max-h-[70vh] overflow-y-auto"
             >
               {filteredFriends.map((friend) => (
                 <div key={friend.fid} className="rounded-lg border">
