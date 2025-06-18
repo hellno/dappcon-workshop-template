@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import sdk from "@farcaster/frame-sdk";
 import type { Context } from "@farcaster/frame-core";
 
@@ -13,35 +13,50 @@ export function useMiniAppSdk() {
   const [lastEvent, setLastEvent] = useState("");
   const [pinFrameResponse, setPinFrameResponse] = useState("");
   const [isMiniApp, setIsMiniApp] = useState(false);
+  
+  // Ref to track if component is mounted to prevent state updates on unmounted components
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
     if (!sdk) return;
 
-    sdk.on("frameAdded", ({ notificationDetails }) => {
+    // Set up event listeners with proper cleanup tracking
+    const handleFrameAdded = ({ notificationDetails }: { notificationDetails?: unknown }) => {
+      if (!isMountedRef.current) return;
       setLastEvent(
         `frameAdded${notificationDetails ? ", notifications enabled" : ""}`,
       );
       setIsMiniAppSaved(true);
-    });
+    };
 
-    sdk.on("frameAddRejected", ({ reason }) => {
+    const handleFrameAddRejected = ({ reason }: { reason: string }) => {
+      if (!isMountedRef.current) return;
       setLastEvent(`frameAddRejected, reason ${reason}`);
-    });
+    };
 
-    sdk.on("frameRemoved", () => {
+    const handleFrameRemoved = () => {
+      if (!isMountedRef.current) return;
       setLastEvent("frameRemoved");
       setIsMiniAppSaved(false);
-    });
+    };
+
+    sdk.on("frameAdded", handleFrameAdded);
+    sdk.on("frameAddRejected", handleFrameAddRejected);
+    sdk.on("frameRemoved", handleFrameRemoved);
 
     // CRITICAL TO LOAD MINI APP - DON'T REMOVE
     sdk.actions.ready({});
-    setIsSDKLoaded(true);
+    if (isMountedRef.current) {
+      setIsSDKLoaded(true);
+    }
 
     // Clean up on unmount
     return () => {
-      sdk.removeAllListeners();
+      sdk.off("frameAdded", handleFrameAdded);
+      sdk.off("frameAddRejected", handleFrameAddRejected);
+      sdk.off("frameRemoved", handleFrameRemoved);
     };
-  }, []);
+  }, []); // sdk is imported and stable, no need to include in deps
 
   useEffect(() => {
     const updateContext = async () => {
@@ -75,6 +90,13 @@ export function useMiniAppSdk() {
     } catch (error) {
       setPinFrameResponse(`Error: ${error}`);
     }
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   return {
