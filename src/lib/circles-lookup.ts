@@ -39,7 +39,14 @@ export interface CirclesData {
   avatarInfo?: AvatarInfo;
   isActiveV2?: boolean;
   isActivelyEarning?: boolean;
+  isActiveByActivity?: boolean;
   isTrustedByCurrentUser?: boolean;
+  activityScore?: number;
+  recentActivityCount?: number;
+  lastActivityTimestamp?: number;
+  confidenceScore?: number;
+  shouldSkip?: boolean;
+  skipReason?: string;
 }
 
 export interface DebugData {
@@ -88,10 +95,33 @@ export async function checkCirclesStatusWithDebug(ethAddresses: string[]): Promi
     if (direct.exists) {
       console.log('Found direct Circles profile for:', address);
       
-      // Check if user has active Circles v2 token
+      // Check if user has active Circles v2 token with activity analysis
       const avatarInfo = await checkActiveToken(address);
       const isActiveV2 = avatarInfo && avatarInfo.tokenAddress;
       const isActivelyEarning = avatarInfo && avatarInfo.mintableAmount && avatarInfo.mintableAmount > 0n;
+      const isActiveByActivity = avatarInfo && avatarInfo.isActiveByActivity;
+      
+      // Check if this should be skipped (e.g., organization)
+      if (avatarInfo && avatarInfo.shouldSkip) {
+        return {
+          circlesData: {
+            isOnCircles: true,
+            mainAddress: address,
+            profileData: direct.profileData,
+            avatarInfo,
+            isActiveV2: !!isActiveV2,
+            isActivelyEarning: !!isActivelyEarning,
+            isActiveByActivity: !!isActiveByActivity,
+            shouldSkip: true,
+            skipReason: avatarInfo.skipReason,
+            activityScore: avatarInfo.activityScore,
+            recentActivityCount: avatarInfo.recentActivityCount,
+            lastActivityTimestamp: avatarInfo.lastActivityTimestamp,
+            confidenceScore: 95 // High confidence for direct match
+          },
+          debugData
+        };
+      }
       
       return {
         circlesData: {
@@ -100,7 +130,12 @@ export async function checkCirclesStatusWithDebug(ethAddresses: string[]): Promi
           profileData: direct.profileData,
           avatarInfo,
           isActiveV2: !!isActiveV2,
-          isActivelyEarning: !!isActivelyEarning
+          isActivelyEarning: !!isActivelyEarning,
+          isActiveByActivity: !!isActiveByActivity,
+          activityScore: avatarInfo?.activityScore,
+          recentActivityCount: avatarInfo?.recentActivityCount,
+          lastActivityTimestamp: avatarInfo?.lastActivityTimestamp,
+          confidenceScore: 95 // High confidence for direct match
         },
         debugData
       };
@@ -109,10 +144,34 @@ export async function checkCirclesStatusWithDebug(ethAddresses: string[]): Promi
     if (signer.exists) {
       console.log('Found main account via signer lookup for:', address, '-> main:', signer.mainAddress);
       
-      // Check if main address has active Circles v2 token
+      // Check if main address has active Circles v2 token with activity analysis
       const avatarInfo = signer.mainAddress ? await checkActiveToken(signer.mainAddress) : undefined;
       const isActiveV2 = avatarInfo && avatarInfo.tokenAddress;
       const isActivelyEarning = avatarInfo && avatarInfo.mintableAmount && avatarInfo.mintableAmount > 0n;
+      const isActiveByActivity = avatarInfo && avatarInfo.isActiveByActivity;
+      
+      // Check if this should be skipped (e.g., organization)
+      if (avatarInfo && avatarInfo.shouldSkip) {
+        return {
+          circlesData: {
+            isOnCircles: true,
+            mainAddress: signer.mainAddress,
+            profileData: signer.profileData,
+            signerAddress: address,
+            avatarInfo,
+            isActiveV2: !!isActiveV2,
+            isActivelyEarning: !!isActivelyEarning,
+            isActiveByActivity: !!isActiveByActivity,
+            shouldSkip: true,
+            skipReason: avatarInfo.skipReason,
+            activityScore: avatarInfo.activityScore,
+            recentActivityCount: avatarInfo.recentActivityCount,
+            lastActivityTimestamp: avatarInfo.lastActivityTimestamp,
+            confidenceScore: 85 // Lower confidence for signer match
+          },
+          debugData
+        };
+      }
       
       return {
         circlesData: {
@@ -122,7 +181,12 @@ export async function checkCirclesStatusWithDebug(ethAddresses: string[]): Promi
           signerAddress: address,
           avatarInfo,
           isActiveV2: !!isActiveV2,
-          isActivelyEarning: !!isActivelyEarning
+          isActivelyEarning: !!isActivelyEarning,
+          isActiveByActivity: !!isActiveByActivity,
+          activityScore: avatarInfo?.activityScore,
+          recentActivityCount: avatarInfo?.recentActivityCount,
+          lastActivityTimestamp: avatarInfo?.lastActivityTimestamp,
+          confidenceScore: 85 // Lower confidence for signer match
         },
         debugData
       };
@@ -186,6 +250,125 @@ async function directCirclesProfileLookup(address: string) {
   return { exists: false };
 }
 
+// Activity analysis based on events
+interface ActivityAnalysis {
+  activityScore: number;
+  recentActivityCount: number;
+  lastActivityTimestamp: number;
+  isActiveByActivity: boolean;
+  shouldSkip: boolean;
+  skipReason?: string;
+}
+
+function analyzeActivity(events: any[], address: string): ActivityAnalysis {
+  if (!events || events.length === 0) {
+    return {
+      activityScore: 0,
+      recentActivityCount: 0,
+      lastActivityTimestamp: 0,
+      isActiveByActivity: false,
+      shouldSkip: false
+    };
+  }
+
+  // Check if this is an organization (should be skipped)
+  const organizationEvents = events.filter(e => 
+    e.event?.includes('Organization') || e.event === 'CrcV2_RegisterOrganization'
+  );
+  
+  if (organizationEvents.length > 0) {
+    console.log(`🏢 Detected organization for ${address}, should skip`);
+    return {
+      activityScore: 0,
+      recentActivityCount: 0,
+      lastActivityTimestamp: 0,
+      isActiveByActivity: false,
+      shouldSkip: true,
+      skipReason: 'organization'
+    };
+  }
+
+  // Activity-relevant events (transfers, trusts, streams, etc.)
+  const activityEvents = events.filter(e => 
+    e.event?.startsWith('CrcV2_Transfer') ||
+    e.event?.startsWith('CrcV2_Stream') ||
+    e.event?.startsWith('CrcV2_Trust') ||
+    e.event === 'CrcV2_RegisterHuman'
+  );
+
+  // Calculate timestamps (assuming hex timestamps in values)
+  const now = Math.floor(Date.now() / 1000);
+  const thirtyDaysAgo = now - (30 * 24 * 60 * 60);
+  const ninetyDaysAgo = now - (90 * 24 * 60 * 60);
+
+  let recentActivityCount = 0;
+  let lastActivityTimestamp = 0;
+
+  for (const event of activityEvents) {
+    // Try to extract timestamp from different possible locations
+    let timestamp = 0;
+    if (event.values?.timestamp) {
+      timestamp = typeof event.values.timestamp === 'string' 
+        ? parseInt(event.values.timestamp, 16) 
+        : event.values.timestamp;
+    } else if (event.timestamp) {
+      timestamp = typeof event.timestamp === 'string' 
+        ? parseInt(event.timestamp, 16) 
+        : event.timestamp;
+    }
+
+    if (timestamp > lastActivityTimestamp) {
+      lastActivityTimestamp = timestamp;
+    }
+
+    if (timestamp > thirtyDaysAgo) {
+      recentActivityCount++;
+    }
+  }
+
+  // Calculate activity score (0-100)
+  let activityScore = 0;
+  
+  // Base score for total events (up to 30 points)
+  activityScore += Math.min(30, Math.floor(activityEvents.length / 10));
+  
+  // Recent activity bonus (up to 40 points)
+  activityScore += Math.min(40, recentActivityCount * 2);
+  
+  // Recency bonus (up to 30 points)
+  if (lastActivityTimestamp > thirtyDaysAgo) {
+    activityScore += 30;
+  } else if (lastActivityTimestamp > ninetyDaysAgo) {
+    activityScore += 15;
+  }
+
+  // Consider active if:
+  // 1. Has significant activity (>50 events) OR
+  // 2. Has recent activity (>5 events in 30 days) OR  
+  // 3. Activity score > 40
+  const isActiveByActivity = 
+    activityEvents.length > 50 || 
+    recentActivityCount > 5 || 
+    activityScore > 40;
+
+  console.log(`📊 Activity analysis for ${address}:`, {
+    totalEvents: events.length,
+    activityEvents: activityEvents.length,
+    recentActivityCount,
+    activityScore,
+    isActiveByActivity,
+    lastActivityTimestamp: lastActivityTimestamp > 0 ? new Date(lastActivityTimestamp * 1000).toISOString() : 'unknown'
+  });
+
+  return {
+    activityScore,
+    recentActivityCount,
+    lastActivityTimestamp,
+    isActiveByActivity,
+    shouldSkip: false
+  };
+}
+
 // Check mintable amount for an address using Circles RPC API
 async function checkMintableAmount(address: string): Promise<bigint> {
   try {
@@ -210,13 +393,14 @@ async function checkMintableAmount(address: string): Promise<bigint> {
     }
     
     const data = await response.json();
+    console.log(`📊 Mintable amount API response for ${address}:`, data);
     
-    if (data.result) {
+    if (data.result !== undefined && data.result !== null) {
       const mintableAmount = BigInt(data.result);
       console.log(`✅ Found mintable amount for ${address}: ${mintableAmount.toString()}`);
       return mintableAmount;
     } else {
-      console.log(`❌ No mintable amount found for ${address}`);
+      console.log(`❌ No mintable amount found for ${address}. Response:`, data);
       return 0n;
     }
   } catch (error) {
@@ -225,8 +409,8 @@ async function checkMintableAmount(address: string): Promise<bigint> {
   }
 }
 
-// Check if user is active on Circles v2 by looking for CrcV2_RegisterHuman event (99% more efficient)
-async function checkActiveCirclesToken(address: string): Promise<AvatarInfo | undefined> {
+// Check if user is active on Circles v2 with enhanced activity analysis
+async function checkActiveCirclesToken(address: string): Promise<(AvatarInfo & ActivityAnalysis) | undefined> {
   try {
     console.log(`🔍 Checking for Circles v2 registration: ${address}`);
     
@@ -251,6 +435,21 @@ async function checkActiveCirclesToken(address: string): Promise<AvatarInfo | un
     const data = await response.json();
     
     if (data.result && Array.isArray(data.result) && data.result.length > 0) {
+      // Analyze activity first
+      const activityAnalysis = analyzeActivity(data.result, address);
+      
+      // If this is an organization, return early with skip flag
+      if (activityAnalysis.shouldSkip) {
+        return {
+          avatar: address,
+          tokenAddress: undefined,
+          avatarType: 'organization',
+          circlesVersion: 'v2',
+          mintableAmount: 0n,
+          ...activityAnalysis
+        };
+      }
+      
       // Look for CrcV2_RegisterHuman event - the definitive active v2 user indicator
       const registerEvent = data.result.find((event: any) => 
         event.event === 'CrcV2_RegisterHuman'
@@ -276,7 +475,8 @@ async function checkActiveCirclesToken(address: string): Promise<AvatarInfo | un
           avatarType,
           circlesVersion: 'v2',
           signupTimestamp: registerEvent.values?.timestamp ? parseInt(registerEvent.values.timestamp, 16) : undefined,
-          mintableAmount
+          mintableAmount,
+          ...activityAnalysis
         };
       } else {
         // Fallback: check for any CrcV2_* events (backup method for edge cases)
@@ -300,7 +500,8 @@ async function checkActiveCirclesToken(address: string): Promise<AvatarInfo | un
             avatarType: 'human', // Default for fallback
             circlesVersion: 'v2',
             signupTimestamp: firstV2Event?.values?.timestamp ? parseInt(firstV2Event.values.timestamp, 16) : undefined,
-            mintableAmount
+            mintableAmount,
+            ...activityAnalysis
           };
         } else {
           console.log(`❌ No Circles v2 registration or activity found for ${address}`);

@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Switch } from "~/components/ui/switch";
-import { Users, RefreshCw, ExternalLink, Heart, ChevronDown } from "lucide-react";
+import { Users, RefreshCw, ExternalLink, Heart, ChevronDown, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { streamCirclesStatus, type CirclesData } from "~/lib/circles-lookup";
 
@@ -70,6 +70,7 @@ export function FriendsList() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [totalFollowing, setTotalFollowing] = useState<number | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [activityFilter, setActivityFilter] = useState<'all' | 'earning' | 'active' | 'highly-active'>('all');
 
   // Progressive Circles status checking
   const startCirclesProcessing = useCallback(
@@ -96,6 +97,7 @@ export function FriendsList() {
       try {
         let finalCirclesCount = 0;
         let finalEarningCount = 0;
+        let finalActiveCount = 0;
         
         for await (const update of streamCirclesStatus(
           newFriends,
@@ -126,12 +128,16 @@ export function FriendsList() {
               });
             }
             
-            // Calculate current circles and earning counts from updated map
-            finalCirclesCount = Array.from(newMap.values()).filter(
-              (f) => f.circlesData?.isActiveV2,
+            // Calculate current circles and activity counts from updated map
+            const allUpdatedFriends = Array.from(newMap.values());
+            finalCirclesCount = allUpdatedFriends.filter(
+              (f) => f.circlesData?.isOnCircles && !f.circlesData?.shouldSkip,
             ).length;
-            finalEarningCount = Array.from(newMap.values()).filter(
+            finalEarningCount = allUpdatedFriends.filter(
               (f) => f.circlesData?.isActivelyEarning,
+            ).length;
+            finalActiveCount = allUpdatedFriends.filter(
+              (f) => f.circlesData?.isActiveByActivity,
             ).length;
             
             return newMap;
@@ -144,11 +150,12 @@ export function FriendsList() {
         setIsProcessing(false);
 
         if (finalCirclesCount > 0) {
-          if (finalEarningCount > 0) {
-            toast.success(`Found ${finalCirclesCount} friends on Circles (${finalEarningCount} actively earning)!`);
-          } else {
-            toast.success(`Found ${finalCirclesCount} friends on Circles!`);
-          }
+          const statusParts = [];
+          if (finalEarningCount > 0) statusParts.push(`${finalEarningCount} earning`);
+          if (finalActiveCount > 0) statusParts.push(`${finalActiveCount} active`);
+          
+          const statusText = statusParts.length > 0 ? ` (${statusParts.join(', ')})` : '';
+          toast.success(`Found ${finalCirclesCount} friends on Circles${statusText}!`);
         }
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -348,12 +355,38 @@ export function FriendsList() {
 
   // Convert Map to Array and filter to only show Circles friends
   const allFriendsArray = Array.from(allFriends.values());
-  const circlesFriends = allFriendsArray.filter((friend) => friend.circlesData?.isActiveV2);
-  const earningFriends = allFriendsArray.filter((friend) => friend.circlesData?.isActivelyEarning);
+  
+  // Enhanced filtering - show users who are on Circles and not organizations
+  const allCirclesFriends = allFriendsArray.filter(
+    (friend) => friend.circlesData?.isOnCircles && !friend.circlesData?.shouldSkip
+  );
 
-  // Count is now just the filtered array length
-  const circlesCount = circlesFriends.length;
+  // Apply activity filter
+  const circlesFriends = allCirclesFriends.filter((friend) => {
+    switch (activityFilter) {
+      case 'earning':
+        return friend.circlesData?.isActivelyEarning;
+      case 'highly-active':
+        return (friend.circlesData?.activityScore || 0) > 60;
+      case 'active':
+        return friend.circlesData?.isActiveByActivity;
+      case 'all':
+      default:
+        return true;
+    }
+  });
+  
+  // Count different types of active users (from full list for badges)
+  const earningFriends = allCirclesFriends.filter((friend) => friend.circlesData?.isActivelyEarning);
+  const activeByActivityFriends = allCirclesFriends.filter((friend) => friend.circlesData?.isActiveByActivity);
+  const highActivityFriends = allCirclesFriends.filter((friend) => (friend.circlesData?.activityScore || 0) > 60);
+
+  // Count totals and filtered
+  const totalCirclesCount = allCirclesFriends.length;
+  const filteredCount = circlesFriends.length;
   const earningCount = earningFriends.length;
+  const activeByActivityCount = activeByActivityFriends.length;
+  const highActivityCount = highActivityFriends.length;
 
   if (!isSDKLoaded) {
     return (
@@ -416,6 +449,29 @@ export function FriendsList() {
           <CardDescription>
             Find which friends are on Circles protocol
           </CardDescription>
+          
+          {/* Filter Controls */}
+          {totalCirclesCount > 0 && (
+            <div className="mt-4 flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <select
+                value={activityFilter}
+                onChange={(e) => setActivityFilter(e.target.value as any)}
+                className="text-sm border rounded px-2 py-1 bg-background"
+              >
+                <option value="all">All on Circles ({totalCirclesCount})</option>
+                {activeByActivityCount > 0 && (
+                  <option value="active">Active ({activeByActivityCount})</option>
+                )}
+                {earningCount > 0 && (
+                  <option value="earning">Earning ({earningCount})</option>
+                )}
+                {highActivityCount > 0 && (
+                  <option value="highly-active">Highly Active ({highActivityCount})</option>
+                )}
+              </select>
+            </div>
+          )}
 
         </CardHeader>
         <CardContent className="p-4">
@@ -424,11 +480,21 @@ export function FriendsList() {
             {allFriendsArray.length > 0 ? (
               <div className="flex gap-2 flex-wrap">
                 <Badge variant="default" className="text-xs">
-                  {circlesFriends.length} friends on Circles
+                  {activityFilter === 'all' ? totalCirclesCount : filteredCount} friends on Circles
                 </Badge>
+                {activeByActivityCount > 0 && (
+                  <Badge variant="default" className="text-xs bg-blue-100 text-blue-800 border-blue-200">
+                    🔥 {activeByActivityCount} active
+                  </Badge>
+                )}
                 {earningCount > 0 && (
                   <Badge variant="default" className="text-xs bg-green-100 text-green-800 border-green-200">
-                    💰 {earningCount} actively earning
+                    💰 {earningCount} earning
+                  </Badge>
+                )}
+                {highActivityCount > 0 && (
+                  <Badge variant="default" className="text-xs bg-purple-100 text-purple-800 border-purple-200">
+                    ⭐ {highActivityCount} highly active
                   </Badge>
                 )}
                 <Badge variant="secondary" className="text-xs">
@@ -494,10 +560,22 @@ export function FriendsList() {
                         <p className="font-medium text-sm truncate">
                           {friend.display_name}
                         </p>
-                        {/* Show earning status */}
-                        {friend.circlesData?.isActivelyEarning && (
+                        {/* Show activity status with priority: earning > highly active > active */}
+                        {friend.circlesData?.isActivelyEarning ? (
                           <Badge variant="default" className="text-xs bg-green-100 text-green-800 border-green-200">
                             💰 Earning
+                          </Badge>
+                        ) : (friend.circlesData?.activityScore || 0) > 60 ? (
+                          <Badge variant="default" className="text-xs bg-purple-100 text-purple-800 border-purple-200">
+                            ⭐ Highly Active
+                          </Badge>
+                        ) : friend.circlesData?.isActiveByActivity ? (
+                          <Badge variant="default" className="text-xs bg-blue-100 text-blue-800 border-blue-200">
+                            🔥 Active
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs">
+                            On Circles
                           </Badge>
                         )}
                       </div>
@@ -505,6 +583,18 @@ export function FriendsList() {
                         <p className="text-xs text-muted-foreground truncate">
                           @{friend.username}
                         </p>
+                        {/* Show activity score if available */}
+                        {friend.circlesData?.activityScore !== undefined && (
+                          <span className="text-xs text-blue-600 font-medium">
+                            Score: {friend.circlesData.activityScore}
+                          </span>
+                        )}
+                        {/* Show recent activity count */}
+                        {friend.circlesData?.recentActivityCount !== undefined && friend.circlesData.recentActivityCount > 0 && (
+                          <span className="text-xs text-orange-600 font-medium">
+                            {friend.circlesData.recentActivityCount} recent
+                          </span>
+                        )}
                         {/* Show mintable amount if available */}
                         {friend.circlesData?.avatarInfo?.mintableAmount && 
                          friend.circlesData.avatarInfo.mintableAmount > 0n && (
@@ -559,17 +649,25 @@ export function FriendsList() {
                 </div>
               ))}
 
-              {/* Empty State - No Circles Friends Yet */}
+              {/* Empty State - No Circles Friends Yet or Filtered Out */}
               {circlesFriends.length === 0 && allFriendsArray.length > 0 && (
                 <div className="flex flex-col items-center justify-center py-12">
                   <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                   <p className="text-muted-foreground text-center">
-                    {circlesProgress
-                      ? `Checked ${allFriendsArray.length} friends, still searching for Circles accounts...`
-                      : `No Circles friends found yet in ${allFriendsArray.length} friends`}
+                    {totalCirclesCount === 0 ? (
+                      circlesProgress
+                        ? `Checked ${allFriendsArray.length} friends, still searching for Circles accounts...`
+                        : `No Circles friends found yet in ${allFriendsArray.length} friends`
+                    ) : (
+                      `No friends match the "${activityFilter}" filter`
+                    )}
                   </p>
                   <p className="text-xs text-muted-foreground mt-2 text-center">
-                    {loadingFriends ? "Loading more friends..." : "Circles accounts are rare, but we'll keep searching!"}
+                    {totalCirclesCount === 0 ? (
+                      loadingFriends ? "Loading more friends..." : "Circles accounts are rare, but we'll keep searching!"
+                    ) : (
+                      `Try selecting "All on Circles" to see all ${totalCirclesCount} friends`
+                    )}
                   </p>
                 </div>
               )}
@@ -609,7 +707,7 @@ export function FriendsList() {
                     Searched {allFriendsArray.length} friends
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Found {circlesCount} friends on Circles
+                    Found {totalCirclesCount} friends on Circles
                   </p>
                 </div>
               )}
