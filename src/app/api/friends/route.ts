@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
     }
     const data = await apiRes.json();
     console.log("Following data received, count:", data.following?.length ?? 0);
-    console.log("Has next page:", data.has_more === true);
+    console.log("Has next page:", data.next?.cursor != null);
 
     // Extract the user data from the response
     const followingUsers = data.following ?? data.users ?? [];
@@ -65,8 +65,8 @@ export async function GET(request: NextRequest) {
         following: followingUsers.length,
       },
       pagination: {
-        nextCursor: data.next_cursor || null,
-        hasMore: data.has_more === true,
+        nextCursor: data.next?.cursor || null,
+        hasMore: data.next?.cursor != null,
       },
     });
   } catch (error) {
