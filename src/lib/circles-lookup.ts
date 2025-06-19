@@ -665,8 +665,8 @@ export async function batchCheckCirclesStatus(
 ): Promise<Map<number, { circlesData: CirclesData; debugData: DebugData }>> {
   const results = new Map<number, { circlesData: CirclesData; debugData: DebugData }>();
   
-  console.log('=== STARTING BATCH CIRCLES LOOKUP ===');
-  console.log('Total users to check:', users.length);
+  console.log('=== STARTING BATCH CIRCLES LOOKUP ===', { totalUsers: users.length });
+  console.log('=== Users to batch sample:', users.slice(0, 3).map(u => ({ fid: u.fid, username: u.username, addresses: u.verified_addresses })));
   
   // Filter users that have verified addresses
   const usersWithAddresses = users.filter(user => 
@@ -739,8 +739,8 @@ export async function* streamCirclesStatus(
   users: Array<{ fid: number; username: string; verified_addresses?: { eth_addresses: string[] } }>,
   currentUserAddresses?: string[]
 ): AsyncGenerator<{ fid: number; circlesData: CirclesData; progress: { completed: number; total: number } }> {
-  console.log('=== STARTING STREAMING CIRCLES LOOKUP ===');
-  console.log('Total users to check:', users.length);
+  console.log('=== STARTING STREAMING CIRCLES LOOKUP ===', { totalUsers: users.length, currentUserAddresses });
+  console.log('=== Streaming users sample:', users.slice(0, 3).map(u => ({ fid: u.fid, username: u.username, addresses: u.verified_addresses })));
   
   // Get current user's trust relationships if provided
   let currentUserTrusts = new Set<string>();
