@@ -352,8 +352,8 @@ export function CirclesAnalyzer({ friends }: CirclesAnalyzerProps) {
                 ({circlesProgress.percentage}%)
               </p>
             )}
-            <p className="text-xs text-muted-foreground mb-6">
-              Using cached data when available • This may take a few minutes
+            <p className="text-lg text-muted-foreground mb-6">
+              This may take a few minutes
             </p>
             <Button onClick={stopAnalysis} variant="outline">
               Stop Analysis
