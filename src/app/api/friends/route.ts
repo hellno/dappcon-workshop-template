@@ -1,10 +1,4 @@
-import { NeynarAPIClient, Configuration } from "@neynar/nodejs-sdk";
 import { NextRequest } from "next/server";
-
-const config = new Configuration({
-  apiKey: process.env.NEYNAR_API_KEY || "",
-});
-const neynarClient = new NeynarAPIClient(config);
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,24 +37,27 @@ export async function GET(request: NextRequest) {
 
     console.log("Fetching following for FID:", fid);
 
-    // Get user's following list with pagination support
-    const followingParams: any = {
-      fid,
-      limit,
-      viewerFid: fid,
-      sortType: "algorithmic",
-    };
+    // Fetch from Neynar v2 endpoint
+    const url = new URL("https://api.neynar.com/v2/farcaster/following/");
+    url.searchParams.set("fid", fid.toString());
+    url.searchParams.set("limit", limit.toString());
+    url.searchParams.set("sort_type", "desc_chron");
     if (cursorParam) {
-      followingParams.cursor = cursorParam;
+      url.searchParams.set("cursor", cursorParam);
     }
+    const apiRes = await fetch(url.toString(), {
+      method: "GET",
+      headers: { "x-api-key": process.env.NEYNAR_API_KEY || "" },
+    });
+    if (!apiRes.ok) {
+      throw new Error(`Neynar v2 API error: ${apiRes.status}`);
+    }
+    const data = await apiRes.json();
+    console.log("Following data received, count:", data.following?.length ?? 0);
+    console.log("Has next page:", data.has_more === true);
 
-    const following = await neynarClient.fetchUserFollowing(followingParams);
-
-    console.log("Following data received, user count:", following.users.length);
-    console.log("Has next page:", !!following.next?.cursor);
-
-    // Extract the user data from the following response
-    const followingUsers = following.users.map((follower) => follower.user);
+    // Extract the user data from the response
+    const followingUsers = data.following ?? data.users ?? [];
 
     return Response.json({
       friends: followingUsers,
@@ -68,8 +65,8 @@ export async function GET(request: NextRequest) {
         following: followingUsers.length,
       },
       pagination: {
-        nextCursor: following.next?.cursor || null,
-        hasMore: !!following.next?.cursor,
+        nextCursor: data.next_cursor || null,
+        hasMore: data.has_more === true,
       },
     });
   } catch (error) {
