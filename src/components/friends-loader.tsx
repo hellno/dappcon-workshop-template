@@ -54,14 +54,14 @@ const debugApiCall = async (url: string, description: string) => {
   try {
     const response = await fetch(url);
     console.log(`📡 ${description} status: ${response.status}`);
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`❌ ${description} failed:`, response.status, errorText);
       toast.error(`API Error: ${description} (${response.status})`);
       return null;
     }
-    
+
     const data = await response.json();
     console.log(`✅ ${description} success:`, data);
     return data;
@@ -72,7 +72,10 @@ const debugApiCall = async (url: string, description: string) => {
   }
 };
 
-export function FriendsLoader({ onFriendsLoaded, compactMode = false }: FriendsLoaderProps) {
+export function FriendsLoader({
+  onFriendsLoaded,
+  compactMode = false,
+}: FriendsLoaderProps) {
   const { context, isSDKLoaded } = useMiniAppSdk();
   const [allFriends, setAllFriends] = useState<FarcasterUser[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
@@ -83,7 +86,7 @@ export function FriendsLoader({ onFriendsLoaded, compactMode = false }: FriendsL
   // Get cache key for this user's friends
   const getFriendsCacheKey = useCallback(() => {
     if (!context?.user?.fid) return null;
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
     return `friends_${context.user.fid}_${today}`;
   }, [context?.user?.fid]);
 
@@ -93,7 +96,7 @@ export function FriendsLoader({ onFriendsLoaded, compactMode = false }: FriendsL
       console.log(`=== Loading Friends Batch ${batchNumber} ===`);
       console.log("User FID:", context?.user?.fid);
       console.log("Cursor:", cursor);
-      
+
       if (!context?.user?.fid) {
         console.error("❌ No user FID available");
         toast.error("User not authenticated");
@@ -108,8 +111,11 @@ export function FriendsLoader({ onFriendsLoaded, compactMode = false }: FriendsL
         if (cursor) params.append("cursor", cursor);
 
         const url = `/api/friends?${params}`;
-        const data: FriendsData | null = await debugApiCall(url, `Friends Batch ${batchNumber}`);
-        
+        const data: FriendsData | null = await debugApiCall(
+          url,
+          `Friends Batch ${batchNumber}`,
+        );
+
         if (!data) {
           console.error("❌ API call failed - no data returned");
           return false;
@@ -118,7 +124,7 @@ export function FriendsLoader({ onFriendsLoaded, compactMode = false }: FriendsL
         console.log("📥 Processing friends data:", {
           friendsReceived: data.friends.length,
           hasStats: !!data.stats,
-          hasPagination: !!data.pagination
+          hasPagination: !!data.pagination,
         });
 
         // Return batch result
@@ -147,7 +153,7 @@ export function FriendsLoader({ onFriendsLoaded, compactMode = false }: FriendsL
 
     const url = `/api/user-stats?fid=${context.user.fid}`;
     const stats = await debugApiCall(url, "User Stats");
-    
+
     if (stats?.following_count) {
       setTotalFollowing(stats.following_count);
       console.log("✅ Total following count:", stats.following_count);
@@ -215,11 +221,13 @@ export function FriendsLoader({ onFriendsLoaded, compactMode = false }: FriendsL
           batchSize: result.friends.length,
           totalLoaded: allLoadedFriends.length,
           hasMore: result.hasMore,
-          nextCursor: result.nextCursor
+          nextCursor: result.nextCursor,
         });
 
         if (!result.hasMore) {
-          console.log(`🎉 Loaded all available friends (${allLoadedFriends.length} total)`);
+          console.log(
+            `🎉 Loaded all available friends (${allLoadedFriends.length} total)`,
+          );
           break;
         }
 
@@ -238,7 +246,7 @@ export function FriendsLoader({ onFriendsLoaded, compactMode = false }: FriendsL
 
       setIsComplete(true);
       onFriendsLoaded(allLoadedFriends);
-      
+
       toast.success(`Successfully loaded ${allLoadedFriends.length} friends!`);
     } catch (error) {
       console.error("💥 Critical error in loading:", error);
@@ -262,7 +270,13 @@ export function FriendsLoader({ onFriendsLoaded, compactMode = false }: FriendsL
       console.log("✅ Auto-starting friends loading...");
       loadAllFriends();
     }
-  }, [isSDKLoaded, context?.user?.fid, isComplete, loadingFriends, loadAllFriends]);
+  }, [
+    isSDKLoaded,
+    context?.user?.fid,
+    isComplete,
+    loadingFriends,
+    loadAllFriends,
+  ]);
 
   if (!isSDKLoaded) {
     return (
@@ -317,9 +331,7 @@ export function FriendsLoader({ onFriendsLoaded, compactMode = false }: FriendsL
           <Users className="h-5 w-5" />
           Your Farcaster Friends
         </CardTitle>
-        <CardDescription>
-          Loading your complete friends network
-        </CardDescription>
+        <CardDescription>Loading your complete friends network</CardDescription>
       </CardHeader>
       <CardContent className="p-4">
         {/* Status */}
@@ -341,7 +353,10 @@ export function FriendsLoader({ onFriendsLoaded, compactMode = false }: FriendsL
             </Badge>
           )}
           {isComplete && (
-            <Badge variant="outline" className="text-xs bg-green-50 border-green-200 text-green-700">
+            <Badge
+              variant="outline"
+              className="text-xs bg-green-50 border-green-200 text-green-700"
+            >
               <CheckCircle className="h-3 w-3 mr-1" />
               Complete
             </Badge>
@@ -353,24 +368,29 @@ export function FriendsLoader({ onFriendsLoaded, compactMode = false }: FriendsL
           <div className="min-h-[300px] flex flex-col justify-center items-center">
             <div className="text-center w-full max-w-md">
               <RefreshCw className="h-12 w-12 mx-auto mb-6 animate-spin text-blue-500" />
-              <p className="text-xl font-medium mb-4">Loading your friends...</p>
-              
+              <p className="text-xl font-medium mb-4">
+                Loading your friends...
+              </p>
+
               {/* Progress Bar */}
               <div className="w-full bg-muted rounded-full h-3 mb-4">
-                <div 
+                <div
                   className="bg-blue-500 h-3 rounded-full transition-all duration-500 ease-out"
-                  style={{ 
-                    width: totalFollowing 
+                  style={{
+                    width: totalFollowing
                       ? `${Math.min((allFriends.length / Math.min(totalFollowing, 10000)) * 100, 100)}%`
-                      : `${Math.min((currentBatch / 10) * 100, 100)}%`
+                      : `${Math.min((currentBatch / 10) * 100, 100)}%`,
                   }}
                 />
               </div>
-              
+
               {/* Progress Stats */}
               <div className="space-y-2">
                 <p className="text-base text-muted-foreground">
-                  <span className="font-medium text-foreground">{allFriends.length}</span> friends loaded
+                  <span className="font-medium text-foreground">
+                    {allFriends.length}
+                  </span>{" "}
+                  friends loaded
                   {totalFollowing && (
                     <span className="text-sm ml-1">
                       of {Math.min(totalFollowing, 10000).toLocaleString()}
@@ -378,7 +398,8 @@ export function FriendsLoader({ onFriendsLoaded, compactMode = false }: FriendsL
                   )}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Batch {currentBatch} • This may take a moment for large networks
+                  Batch {currentBatch} • This may take a moment if you have many
+                  friends
                 </p>
               </div>
             </div>
@@ -387,8 +408,11 @@ export function FriendsLoader({ onFriendsLoaded, compactMode = false }: FriendsL
           <div className={compactMode ? "py-3" : "py-6"}>
             <div className="flex items-center gap-3 justify-center">
               <CheckCircle className="h-5 w-5 text-green-500" />
-              <p className={`${compactMode ? "text-sm" : "text-base"} font-medium`}>
-                Success! Found {allFriends.length.toLocaleString()} Farcaster friends
+              <p
+                className={`${compactMode ? "text-sm" : "text-base"} font-medium`}
+              >
+                Success! Found {allFriends.length.toLocaleString()} Farcaster
+                friends
               </p>
             </div>
           </div>

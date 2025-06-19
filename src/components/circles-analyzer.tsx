@@ -325,15 +325,15 @@ export function CirclesAnalyzer({ friends }: CirclesAnalyzerProps) {
         {!isAnalyzing && !isComplete && activeFriends.length === 0 ? (
           <div className="min-h-[300px] flex flex-col justify-center items-center text-center">
             <Search className="h-8 w-8 mx-auto mb-4 text-blue-500" />
-            <p className="text-lg font-medium mb-2">
+            <p className="text-xl font-medium mb-1">
               Ready to find Circles friends
             </p>
-            <p className="text-sm text-muted-foreground mb-4">
-              We'll analyze your {friends.length} friends to see who's on
-              Circles
+            <p className="mx-auto text-sm text-muted-foreground mb-4">
+              We&apos;ll analyze your {friends.length} friends
+              <br /> to see who&apos;s on Circles
             </p>
             <p className="text-xs text-muted-foreground mb-6">
-              this may take a few minutes for large networks
+              this may take a few minutes if you have many friends
             </p>
             <Button onClick={startCirclesAnalysis} size="lg">
               <Search className="h-4 w-4 mr-2" />
@@ -344,7 +344,7 @@ export function CirclesAnalyzer({ friends }: CirclesAnalyzerProps) {
           <div className="min-h-[300px] flex flex-col justify-center items-center text-center">
             <RefreshCw className="h-8 w-8 mx-auto mb-4 animate-spin text-blue-500" />
             <p className="text-lg font-medium mb-2">
-              Analyzing your friends...
+              Looking for your friends on Circles...
             </p>
             {circlesProgress && (
               <p className="text-sm text-muted-foreground mb-4">
