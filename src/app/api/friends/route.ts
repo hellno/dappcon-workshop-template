@@ -56,8 +56,9 @@ export async function GET(request: NextRequest) {
     console.log("Following data received, count:", data.following?.length ?? 0);
     console.log("Has next page:", data.next?.cursor != null);
 
-    // Extract the user data from the response
-    const followingUsers = data.following ?? data.users ?? [];
+    // Extract the user data from the response and unwrap follow envelopes
+    const rawFriends = data.following ?? data.users ?? [];
+    const followingUsers = rawFriends.map((item: any) => item.user ?? item);
 
     return Response.json({
       friends: followingUsers,
