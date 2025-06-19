@@ -48,6 +48,7 @@ export function CirclesAnalyzer({ friends }: CirclesAnalyzerProps) {
   const [circlesProgress, setCirclesProgress] =
     useState<CirclesProgress | null>(null);
   const [isComplete, setIsComplete] = useState(false);
+  const [showPartialResults, setShowPartialResults] = useState(false);
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
   // Remove activity filter - only show active users
@@ -322,7 +323,7 @@ export function CirclesAnalyzer({ friends }: CirclesAnalyzerProps) {
         </div>
 
         {/* Main Content */}
-        {!isAnalyzing && !isComplete && activeFriends.length === 0 ? (
+        {!isAnalyzing && !isComplete && activeFriends.length === 0 && !showPartialResults ? (
           <div className="min-h-[300px] flex flex-col justify-center items-center text-center">
             <Search className="h-8 w-8 mx-auto mb-4 text-blue-500" />
             <p className="text-xl font-medium mb-1">
@@ -340,7 +341,7 @@ export function CirclesAnalyzer({ friends }: CirclesAnalyzerProps) {
               Find Friends on Circles
             </Button>
           </div>
-        ) : isAnalyzing ? (
+        ) : isAnalyzing && !showPartialResults ? (
           <div className="min-h-[300px] flex flex-col justify-center items-center text-center">
             <RefreshCw className="h-8 w-8 mx-auto mb-4 animate-spin text-blue-500" />
             <p className="text-lg font-medium mb-2">
@@ -355,6 +356,11 @@ export function CirclesAnalyzer({ friends }: CirclesAnalyzerProps) {
             <p className="text-lg text-muted-foreground mb-6">
               This may take a few minutes
             </p>
+            {activeFriends.length > 0 && (
+              <Button onClick={() => setShowPartialResults(true)} variant="outline" size="sm" className="mb-2">
+                Show {activeFriends.length} friends on Circles
+              </Button>
+            )}
             <Button onClick={stopAnalysis} variant="outline">
               Stop Analysis
             </Button>
@@ -442,6 +448,15 @@ export function CirclesAnalyzer({ friends }: CirclesAnalyzerProps) {
 
             {/* Action buttons */}
             <div className="mt-4 pt-4 border-t flex gap-2">
+              {isAnalyzing && showPartialResults && (
+                <Button
+                  onClick={() => setShowPartialResults(false)}
+                  variant="outline"
+                  size="sm"
+                >
+                  Back to Analysis
+                </Button>
+              )}
               <Button
                 onClick={startCirclesAnalysis}
                 variant="outline"
